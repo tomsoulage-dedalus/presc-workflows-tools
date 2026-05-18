@@ -1,9 +1,9 @@
 ---
-name: "create-pr"
+name: "pr-create"
 description: "Crée la Pull Request GitHub avec titre et body générés depuis le contexte du ticket Jira et les changements effectués."
 ---
 
-# Create PR Skill
+# PR Create Skill
 
 ## Required configuration
 
@@ -17,7 +17,7 @@ Prérequis : `gh` CLI installé et authentifié.
 
 ## Available commands
 
-### `/create-pr`
+### `/pr-create`
 
 Génère et crée la Pull Request GitHub (draft) depuis la branche courante vers `develop`.
 
@@ -30,7 +30,7 @@ Génère et crée la Pull Request GitHub (draft) depuis la branche courante vers
 | Ticket prefix | Type   | Commit prefix |
 |---------------|--------|---------------|
 | `HORME-`      | Story  | `feat`        |
-| `HDEFECT-`    | Defect | `fix`         |
+| `ORBISBUG-`   | Defect | `fix`         |
 
 ---
 
@@ -46,7 +46,7 @@ Génère et crée la Pull Request GitHub (draft) depuis la branche courante vers
 | Ticket type | Example |
 |-------------|---------|
 | Story       | `feat(HORME-1444): add SSO SAML support /fixed` |
-| Defect      | `fix(HDEFECT-302): fix crash on login /fixed` |
+| Defect      | `fix(ORBISBUG-302): fix crash on login /fixed` |
 
 ---
 
@@ -73,17 +73,17 @@ Si `gh` n'est pas disponible :
 Récupérer le contexte :
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
-TICKET=$(echo $BRANCH | grep -oE '(HORME|HDEFECT)-[0-9]+')
+TICKET=$(echo $BRANCH | grep -oE '(HORME|ORBISBUG)-[0-9]+')
 ```
 
 Déterminer le type :
 ```bash
 if [[ "$TICKET" == HORME-* ]]; then
   COMMIT_PREFIX="feat"
-elif [[ "$TICKET" == HDEFECT-* ]]; then
+elif [[ "$TICKET" == ORBISBUG-* ]]; then
   COMMIT_PREFIX="fix"
 else
-  echo "❌ Unknown ticket prefix. Expected: HORME-XXXX or HDEFECT-XXXX"
+  echo "❌ Unknown ticket prefix. Expected: HORME-XXXX or ORBISBUG-XXXX"
   exit 1
 fi
 ```
@@ -107,7 +107,7 @@ Si le résumé fait plus de 60 caractères, le tronquer proprement (ne pas coupe
 
 Exemples :
 - `feat(HORME-1444): add SSO SAML support /fixed`
-- `fix(HDEFECT-302): fix crash on login /fixed`
+- `fix(ORBISBUG-302): fix crash on login /fixed`
 
 ### Step 3 — Générer le body de la PR
 
@@ -134,7 +134,7 @@ Exemples :
 
 ## Tests
 
-<résultat du /test-check : specs lancées et leur statut>
+<résultat du /test-implement : specs lancées et leur statut>
 - ✅ <spec-name.spec.ts> — <N> tests passants
 - ⚠️ <fichier.ts> — aucune spec (à créer)
 ```
@@ -173,10 +173,10 @@ gh pr create \
 |-----------|-------------|
 | `gh` non installé | Afficher les instructions d'installation et stopper |
 | `gh` non authentifié | Afficher `gh auth login` et stopper |
-| Préfixe inconnu (ni `HORME-` ni `HDEFECT-`) | "❌ Unknown prefix. Use HORME-XXXX or HDEFECT-XXXX" |
+| Préfixe inconnu (ni `HORME-` ni `ORBISBUG-`) | "❌ Unknown prefix. Use HORME-XXXX or ORBISBUG-XXXX" |
 | Ticket non trouvé sur Jira | "❌ Ticket <KEY> not found on ${JIRA_DOMAIN}" |
 | `JIRA_API_TOKEN` manquant | "❌ Configure JIRA_API_TOKEN in ~/.bashrc" |
 | PR déjà existante pour cette branche | Afficher l'URL existante et stopper |
-| Branche non poussée | Proposer de lancer `/lint-check` d'abord |
+| Branche non poussée | Proposer de lancer `/code-lint` d'abord |
 | `develop` n'existe pas | Fallback vers `main` |
 | Label `WORKFLOWS` n'existe pas | Le créer automatiquement |
