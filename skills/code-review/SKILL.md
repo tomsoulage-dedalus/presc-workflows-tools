@@ -1,9 +1,9 @@
 ---
-name: "review-code"
+name: "code-review"
 description: "Review IA du diff Angular basée sur les règles front et les leçons apprises. Met à jour .copilot/lessons.md si une nouvelle erreur bloquante est trouvée."
 ---
 
-# Review Code Skill
+# Code Review Skill
 
 ## Required configuration
 
@@ -13,7 +13,7 @@ Fichiers de référence :
 
 ## Available commands
 
-### `/review-code`
+### `/code-review`
 
 Analyse le diff `main...HEAD` sur les fichiers Angular et produit une review structurée.
 
@@ -77,7 +77,7 @@ Chaque problème est classé :
 
 | Niveau | Signification |
 |--------|--------------|
-| `[BLOQUANT]` | Viole une règle de `front-rules.instructions.md` ou reproduit une leçon connue — **doit être corrigé avant /test-check** |
+| `[BLOQUANT]` | Viole une règle de `front-rules.instructions.md` ou reproduit une leçon connue — **doit être corrigé avant /test-implement** |
 | `[SUGGESTION]` | Amélioration recommandée mais non bloquante |
 | `[INFO]` | Observation sans action requise |
 
@@ -140,11 +140,11 @@ Si une erreur `[BLOQUANT]` **nouvelle** est identifiée (non présente dans `les
 - Si des `[BLOQUANT]` existent → afficher :
   ```
   ⛔ Des problèmes bloquants ont été trouvés.
-     Corrige-les puis relance /review-code.
+     Corrige-les puis relance /code-review.
   ```
 - Si aucun `[BLOQUANT]` → afficher :
   ```
-  ✅ Aucun bloquant. Tu peux continuer avec /test-check.
+  ✅ Aucun bloquant. Tu peux continuer avec /test-implement.
   ```
 
 ---

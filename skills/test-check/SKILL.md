@@ -1,6 +1,6 @@
 ---
 name: "test-check"
-description: "Identifie et lance uniquement les specs Angular impactées par les changements. Bloque /lint-check si des specs échouent."
+description: "Vérifie que les changements de la PR n'ont pas cassé de tests existants (🔵 Angular/Jest + 🟠 Java/Maven). Lance les tests impactés et appelle /test-implement si des tests échouent."
 ---
 
 # Test Check Skill
@@ -9,119 +9,134 @@ description: "Identifie et lance uniquement les specs Angular impactées par les
 
 Aucune variable d'environnement requise.
 
-Prérequis : Jest configuré dans le projet (ou ng test avec jest runner).
+Prérequis :
+- 🔵 Front : Jest configuré dans le projet (ou ng test avec jest runner)
+- 🟠 Back : Maven installé (`mvn --version`)
 
 ## Available commands
 
 ### `/test-check`
 
-Identifie les specs impactées et les lance. Ne lance pas toute la suite de tests.
+Détecte les tests existants impactés par les changements de la PR, les lance, et déclenche `/test-implement` si des tests échouent.
 
 ---
 
 ## Detailed behaviour
 
-### Step 1 — Lister les fichiers TS modifiés (hors specs)
+### Step 1 — Lister les fichiers modifiés par domaine
 
 ```bash
+# Fichiers Angular modifiés (hors specs)
 git diff main...HEAD --name-only | grep '\.ts$' | grep -v '\.spec\.ts$'
+
+# Fichiers Java modifiés (hors tests)
+git diff main...HEAD --name-only | grep '\.java$' | grep -v 'Test\.java$'
 ```
 
-### Step 2 — Extraire les noms des classes/services modifiés
+---
 
-Pour chaque fichier listé, extraire :
-- Le nom de la classe principale (ex: `UserProfileComponent`, `PrescriptionService`)
-- Le nom du fichier sans extension (ex: `user-profile.component`, `prescription.service`)
+### 🔵 Front — Angular
 
-### Step 3 — Trouver les specs impactées
+#### Step 2a — Trouver les specs Angular existantes impactées
 
-Pour chaque classe ou fichier modifié, chercher les `*.spec.ts` qui :
-- Importent le fichier modifié
-- Utilisent `TestBed.inject(NomDuService)` ou le déclarent dans `providers`
-- Ont un nom correspondant au fichier modifié (ex: `user-profile.component.spec.ts`)
+Pour chaque fichier `.ts` modifié, chercher les `*.spec.ts` **déjà existants** qui :
+- Ont un nom correspondant au fichier modifié (convention Angular) :
+  ```bash
+  find src/ -name "<FILE_BASENAME>.spec.ts"
+  ```
+- Ou importent la classe ou le fichier modifié :
+  ```bash
+  grep -rl "<CLASS_NAME>\|<FILE_BASENAME>" src/ --include="*.spec.ts"
+  ```
 
+Combiner et dédupliquer (`sort -u`).
+
+> ⚠️ **Ne pas créer de nouvelles specs** — seules les specs existantes sont concernées. La création est déléguée à `/test-implement`.
+
+#### Step 3a — Lancer les specs Angular impactées
+
+**Détecter le runner disponible :**
 ```bash
-grep -rl "<NomClasseModifiée>\|<nom-fichier-modifié>" src/ --include="*.spec.ts"
+npx jest --version 2>/dev/null && echo "jest" || echo "ng"
 ```
 
-Répéter pour chaque classe/fichier modifié et dédupliquer les résultats.
-
-### Step 4 — Signaler les fichiers sans spec
-
-Pour chaque fichier modifié sans spec associée :
-
-```
-⚠️  Aucune spec trouvée pour : <path/to/modified-file.ts>
-
-Squelette suggéré :
-
-import { TestBed } from '@angular/core/testing';
-import { <NomClasse> } from './<nom-fichier>';
-
-describe('<NomClasse>', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      // providers, imports...
-    });
-  });
-
-  it('should be created', () => {
-    // TODO: implémenter
-  });
-});
-```
-
-### Step 5 — Lancer uniquement les specs impactées
-
-Si des specs ont été trouvées :
-
+**Avec Jest (préféré) :**
 ```bash
 npx jest --testPathPattern="<spec1>|<spec2>|..." --no-coverage
 ```
 
-Ou avec ng :
+**Avec ng test :**
 ```bash
-ng test --include="<spec1>" --include="<spec2>"
+ng test --watch=false --no-progress \
+  --include="<spec1>" --include="<spec2>"
 ```
 
-Si aucune spec trouvée pour aucun fichier modifié, afficher :
-```
-ℹ️  Aucune spec impactée trouvée. Vérifier manuellement si des tests sont requis.
+> ⚠️ **Toujours passer `--watch=false`** avec `ng test` — sans ce flag la commande bloque indéfiniment en mode watch.
+
+---
+
+### 🟠 Back — Java
+
+#### Step 2b — Trouver les tests Java existants impactés
+
+Pour chaque fichier `.java` modifié (ex: `src/main/java/com/dedalus/MyService.java`), chercher la classe de test correspondante dans `src/test/java/` :
+
+```bash
+# Convention : MyService.java → MyServiceTest.java
+CLASS_NAME=$(basename <fichier.java> .java)
+find src/test/java/ -name "${CLASS_NAME}Test.java"
 ```
 
-### Step 6 — Présenter les résultats
+> Si aucun test trouvé pour une classe modifiée, le signaler sans bloquer (délégué à `/test-implement`).
+
+#### Step 3b — Lancer les tests Java impactés
+
+```bash
+mvn test -Dtest="<TestClass1>,<TestClass2>" -pl <module> --no-transfer-progress
+```
+
+> Si les classes de test sont dans des modules Maven différents, lancer une commande par module.
+
+---
+
+### Step 4 — Présenter les résultats
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧪 Test Check — Résultats
+🔍 Test Check — Résultats
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📂 Fichiers modifiés analysés : <N>
-🎯 Specs lancées               : <N>
+🔵 Front Angular
+  📂 Fichiers modifiés analysés : <N>
+  🎯 Specs existantes impactées  : <N>
+  ✅ Tests passants : <N>
+  ❌ Tests en échec : <N>
 
-✅ Tests passants :
-  - <describe> > <test name>
+🟠 Back Java
+  📂 Fichiers modifiés analysés : <N>
+  🎯 Tests existants impactés   : <N>
+  ✅ Tests passants : <N>
+  ❌ Tests en échec : <N>
 
-❌ Tests en échec :
-  Fichier : <spec-file.ts>
-  Describe: <describe block>
-  Test    : <test name>
-  Erreur  : <message d'erreur>
-
-⚠️  Fichiers sans spec :
-  - <path> (squelette proposé ci-dessus)
+❌ Détail des échecs :
+  Fichier  : <test-file>
+  Classe   : <describe / class>
+  Test     : <test name>
+  Erreur   : <message d'erreur>
 ```
 
-### Step 7 — Décision finale
+### Step 5 — Décision finale
 
-- Si des tests échouent → afficher :
+- Si **tous les tests passent** → afficher :
   ```
-  ⛔ Des tests sont en échec. Corriger avant de continuer avec /lint-check.
+  ✅ Aucune régression détectée. Tu peux continuer avec /code-lint.
   ```
-- Si tous les tests passent → afficher :
+
+- Si **des tests échouent** → afficher :
   ```
-  ✅ Tous les tests passent. Tu peux continuer avec /lint-check.
+  ⛔ Des régressions détectées. Lancement de /test-implement pour corriger.
   ```
+  Puis **appeler automatiquement `/test-implement`** pour corriger les tests en échec.
 
 ---
 
@@ -129,6 +144,7 @@ Si aucune spec trouvée pour aucun fichier modifié, afficher :
 
 | Situation | Comportement |
 |-----------|-------------|
-| Aucune spec trouvée pour un fichier modifié | Signaler + proposer squelette |
-| Jest non installé | Afficher `❌ Jest introuvable. Vérifier node_modules ou la config du projet.` |
-| Tests en échec | Bloquer /lint-check, afficher les détails |
+| Aucun test existant trouvé | Signaler + continuer sans bloquer |
+| Jest non installé | Tenter `ng test --watch=false` ; si absent aussi → `❌ Aucun runner Angular trouvé.` |
+| Maven non installé | `❌ Maven introuvable. Vérifier l'installation.` |
+| Tests en échec | Appeler automatiquement `/test-implement` |
