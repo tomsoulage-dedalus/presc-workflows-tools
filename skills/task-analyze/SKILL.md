@@ -1,9 +1,9 @@
 ---
-name: "jira-analyze"
+name: "task-analyze"
 description: "Jira analysis: reads a ticket, fetches linked docs and issues, investigates the codebase, proposes fix hypotheses, and saves an ANALYZE.md — without creating any branch or PR"
 ---
 
-# Jira Analyze Skill
+# Task Analyze Skill
 
 ## Required configuration
 
@@ -16,7 +16,7 @@ The user must have these environment variables configured:
 
 ## Available commands
 
-### `/jira-analyze <ISSUE_KEY>`
+### `/task-analyze <ISSUE_KEY>`
 Full analysis workflow:
 1. Validate the ticket key
 2. Read the Jira ticket fields
@@ -37,7 +37,7 @@ Full analysis workflow:
 | Ticket prefix | Type   |
 |---------------|--------|
 | `HORME-`      | Story  |
-| `HDEFECT-`    | Defect |
+| `ORBISBUG-`   | Defect |
 
 ---
 
@@ -47,8 +47,8 @@ Full analysis workflow:
 
 ```
 If <ISSUE_KEY> starts with "HORME-"   → type = Story
-If <ISSUE_KEY> starts with "HDEFECT-" → type = Defect
-Otherwise → display "❌ Unknown ticket prefix. Expected: HORME-XXXX or HDEFECT-XXXX"
+If <ISSUE_KEY> starts with "ORBISBUG-" → type = Defect
+Otherwise → display "❌ Unknown ticket prefix. Expected: HORME-XXXX or ORBISBUG-XXXX"
 ```
 
 ### Step 2 — Read the Jira ticket
@@ -262,7 +262,7 @@ For each hypothesis/approach:
 
 ## Error handling
 
-- Unknown prefix (neither `HORME-` nor `HDEFECT-`) → "❌ Unknown prefix. Use HORME-XXXX or HDEFECT-XXXX"
+- Unknown prefix (neither `HORME-` nor `ORBISBUG-`) → "❌ Unknown prefix. Use HORME-XXXX or ORBISBUG-XXXX"
 - Ticket not found in Jira → "❌ Ticket <KEY> not found on ${JIRA_DOMAIN}"
 - No token configured → "❌ Configure JIRA_API_TOKEN in ~/.bashrc"
 - Remote links API returns empty → display "None" for the docs section
