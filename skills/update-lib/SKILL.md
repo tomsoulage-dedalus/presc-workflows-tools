@@ -24,11 +24,11 @@ Met à jour une dépendance npm, optionnellement pour un bug spécifié.
 ```
 /update-lib
 /update-lib --lib @medication-statement/lib
+/update-lib --lib @medication-statement/lib --test
+/update-lib --bug eknit-update-version
 /update-lib --bug ORBISBUG-135
 /update-lib --bug ORBISBUG-135 --lib @medication-statement/lib
 /update-lib --bug ORBISBUG-135 --lib @medication-statement/lib --test
-/update-lib --lib @medication-statement/lib --test
-/update-lib --bug ORBISBUG-42 --lib @medication-statement/lib
 ```
 
 ---
@@ -94,12 +94,7 @@ NEW_BRANCH="${ROOT_BRANCH}/presc/bugfix/${BUG_ID}"
 
 **Cas 3 — `--bug` fourni avec un préfixe inconnu :**
 
-Valider le format (lettres majuscules + chiffres + tiret, ex: `ORBISBUG-42`). Si invalide :
-```
-❌ BUG_ID invalide : <valeur reçue>
-   Format attendu  : LETTRES-CHIFFRES (ex: ORBISBUG-42)
-```
-**Stopper.**
+Aucune validation de format : accepter le BUG_ID tel quel.
 
 ```
 NO_BRANCH=false
@@ -181,6 +176,18 @@ Si `NO_BRANCH=true`, afficher à la place :
 ```
 
 ### Step 3 — Mettre à jour la lib
+
+Vérifier que `LIB_NAME` est bien renseigné :
+
+```bash
+[ -z "${LIB_NAME}" ]
+```
+
+Si vide :
+```
+❌ Aucune lib spécifiée. Utilisez --lib ou sélectionnez une lib dans la liste interactive.
+```
+**Stopper.**
 
 Exécuter `npm update` dans les deux projets frontend :
 
@@ -323,7 +330,7 @@ npm start
 |-----------|-------------|
 | `--bug` absent et branche courante se terminant par `/develop` | "❌ Impossible de travailler directement sur la branche '…'" et stopper |
 | `--bug` absent (branche courante valide) | Travaille sur la branche courante, commit `chore(deps)` |
-| `--bug` fourni mais mal formaté | Afficher le format attendu et stopper |
+| `--bug` fourni avec préfixe connu mais mal formaté | Afficher le format attendu et stopper |
 | `--bug` avec préfixe inconnu | Crée une branche `quality/${BUG_ID}` en utilisant le BUG_ID directement, commit `chore(deps)` |
 | Branche `${NEW_BRANCH}` déjà existante | Afficher l'erreur et stopper |
 | HEAD détaché (detached HEAD) | "❌ Detached HEAD non supporté" et stopper |
