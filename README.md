@@ -22,18 +22,19 @@ Voir [skills/SETUP.md](skills/SETUP.md) pour les détails et la désinstallation
 
 ## Catalogue des skills
 
-| Skill | Commande | Quand | Avantage | Description |
-|---|---|---|---|---|
-| **task-start** | `/task-start <TICKET>` | `main` / `develop` | Branche + analyse en une seule commande | Crée la branche depuis un ticket Jira et lance l'analyse |
-| **task-analyze** | `/task-analyze <TICKET>` | n'importe quelle branche | Plan structuré avant de coder, évite les mauvaises pistes | Analyse un ticket Jira, investigue le code, génère un `ANALYZE.md` |
-| **task-implement** | `/task-implement` | branche de la tâche | Faire `/clear` avant — le contexte est dans `ANALYZE.md` | Implémente le code (🟠 Java/Jakarta EE back et/ou 🔵 Angular front) en s'appuyant sur les règles du projet et les leçons passées |
-| **test-check** | `/test-check` | branche de la tâche | Détecte les régressions avant la PR, évite les surprises en CI | Vérifie que les changements n'ont pas cassé de tests existants (🔵 Angular + 🟠 Java) — appelle `/test-implement` si des tests échouent |
-| **test-implement** | `/test-implement` | branche de la tâche | Génère le boilerplate des tests manquants automatiquement | Écrit et corrige les tests (🔵 specs Angular + 🟠 tests JUnit) pour les fichiers sans couverture et les tests en échec |
-| **code-review** | `/code-review` | branche de la tâche | Catch les erreurs avant la review humaine, enrichit `lessons.md` | Review IA du diff (règles front + back + leçons passées) |
-| **code-lint** | `/code-lint` | branche de la tâche | Format + lint auto-fix, commit optionnel — jamais de push automatique | Prettier + ESLint auto-fix sur les fichiers modifiés, puis propose un commit des corrections |
-| **pr-create** | `/pr-create` | branche de la tâche | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Génère et crée la Pull Request GitHub (draft) vers `develop` avec le bon format de titre et le label WORKFLOWS |
-| **pr-fix-comment** | `/pr-fix-comment` | branche de la tâche | Fix ciblé sans avoir à retrouver le contexte du commentaire | Fixe un commentaire de review Copilot sur la PR courante |
-| **pr-fix-build** | `/pr-fix-build <branch> <fix>` | n'importe quelle branche | Corrige la branche d'une PR sans `git stash` ni `checkout` | Corrige le build d'une branche distante (format, lint, tests) sans changer de branche locale |
+| Skill              | Commande | Quand | Avantage                                                                   | Description                                                                                                                                   |
+|--------------------|---|---|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| **task-start**     | `/task-start <TICKET>` | `main` / `develop` | Branche + analyse en une seule commande                                    | Crée la branche depuis un ticket Jira et lance l'analyse                                                                                      |
+| **task-analyze**   | `/task-analyze <TICKET>` | n'importe quelle branche | Plan structuré avant de coder, évite les mauvaises pistes                  | Analyse un ticket Jira, investigue le code, génère un `ANALYZE.md`                                                                            |
+| **task-implement** | `/task-implement` | branche de la tâche | Faire `/clear` avant — le contexte est dans `ANALYZE.md`                   | Implémente le code (🟠 Java/Jakarta EE back et/ou 🔵 Angular front) en s'appuyant sur les règles du projet et les leçons passées              |
+| **test-check**     | `/test-check` | branche de la tâche | Détecte les régressions avant la PR, évite les surprises en CI             | Vérifie que les changements n'ont pas cassé de tests existants (🔵 Angular + 🟠 Java) — appelle `/test-implement` si des tests échouent       |
+| **test-implement** | `/test-implement` | branche de la tâche | Génère le boilerplate des tests manquants automatiquement                  | Écrit et corrige les tests (🔵 specs Angular + 🟠 tests JUnit) pour les fichiers sans couverture et les tests en échec                        |
+| **code-review**    | `/code-review` | branche de la tâche | Catch les erreurs avant la review humaine, enrichit `lessons.md`           | Review IA du diff (règles front + back + leçons passées)                                                                                      |
+| **code-lint**      | `/code-lint` | branche de la tâche | Format + lint auto-fix, commit optionnel — jamais de push automatique      | Prettier + ESLint auto-fix sur les fichiers modifiés, puis propose un commit des corrections                                                  |
+| **pr-create**      | `/pr-create` | branche de la tâche | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Génère et crée la Pull Request GitHub (draft) vers `develop` avec le bon format de titre et le label WORKFLOWS                                |
+| **pr-fix-comment** | `/pr-fix-comment` | branche de la tâche | Fix ciblé sans avoir à retrouver le contexte du commentaire                | Fixe un commentaire de review Copilot sur la PR courante                                                                                      |
+| **pr-fix-build**   | `/pr-fix-build <branch> <fix>` | n'importe quelle branche | Corrige la branche d'une PR sans `git stash` ni `checkout`                 | Corrige le build d'une branche distante (format, lint, tests) sans changer de branche locale                                                  |
+| **update-lib**     | `/update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | n'importe quelle branche | Met à jour une dépendance npm sur app+lib                                  | Met à jour une dépendance npm app/lib, en la spécifiant ou pas (liste proposée dans ce cas), peut lancer en suivant un npm start (avec --test) |
 
 ## Exemples d'utilisation
 
@@ -120,6 +121,19 @@ Voir [skills/SETUP.md](skills/SETUP.md) pour les détails et la désinstallation
 /pr-fix-build presc/feature/ORBIS-5678 tests
 ```
 > Checkout la branche d'une PR dans un worktree temporaire, applique le fix demandé (`format`, `tests`, ou les deux si omis), commit et push — sans toucher à ta branche locale.
+
+---
+
+### `/update-lib`
+```
+/update-lib --bug ORBISBUG-135 --lib @medication-statement/lib --test
+```
+> Crée une branche, met à jour la version de @medication-statement/lib dans les package-lock.json de prescription-app et prescription-lib, crée le commit, lance npm install, vérifie que le proxy pointe bien sur FR et lance npm start
+```
+/update-lib --bug ORBISBUG-135
+```
+> Crée une branche, affiche la liste des dépendances existantes dans les package.json, permet d'en choisir une, met à jour la version de la lib choisie dans les package-lock.json de prescription-app et prescription-lib, crée le commit
+
 
 ## Workflow
 
