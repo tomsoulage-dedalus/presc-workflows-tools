@@ -1,6 +1,6 @@
 ---
 name: "story-architecture-diagram"
-description: "Documente une architecture de story deja definie ou un flow technique existant et produit des diagrammes Mermaid ainsi qu'un rapport d'architecture detaille, sans concevoir l'architecture ni ecrire de code."
+description: "Documente une architecture de story déjà définie ou un flow technique existant et produit des diagrammes Mermaid ainsi qu'un rapport d'architecture détaillé, sans concevoir l'architecture ni écrire de code."
 ---
 
 # Story Architecture Diagram Skill
@@ -9,34 +9,32 @@ description: "Documente une architecture de story deja definie ou un flow techni
 
 Aucune variable d'environnement requise.
 
-Prerequis de contexte :
-- une architecture deja definie par le developpeur,
-- une source d'entree explicite : fichier fourni, contexte courant, ou echange guide,
-- les guidelines de repo, d'equipe ou de contexte si elles existent.
+Prérequis de contexte :
+- une architecture déjà définie par le développeur,
+- une source d'entrée explicite : fichier fourni, contexte courant, ou échange guidé,
+- les guidelines de repo, d'équipe ou de contexte si elles existent.
 
 ## Available commands
 
 ### `/story-architecture-diagram`
 
-Documente une architecture de story deja decidee et produit un rapport d'architecture detaille avec un ou plusieurs diagrammes Mermaid, sans concevoir la solution ni generer de code d'implementation.
+Documente une architecture de story déjà décidée et produit un rapport d'architecture détaillé avec un ou plusieurs diagrammes Mermaid, sans concevoir la solution ni générer de code d'implémentation.
 
 ---
 
-## Detailed behaviour
-
 ## Objectif
 
-Aider le developpeur a formaliser, documenter et diagrammer l'architecture ou le flow technique d'une story importante.
+Aider le développeur à formaliser, documenter et diagrammer l'architecture ou le flow technique d'une story importante.
 
 Ce skill produit :
 
 - un rapport d'architecture,
 - un ou plusieurs diagrammes Mermaid,
-- eventuellement une sortie Markdown exploitable dans le chat, le terminal ou un fichier.
+- éventuellement une sortie Markdown exploitable dans le chat, le terminal ou un fichier.
 
-Ce skill doit documenter une architecture deja fournie, deja decidee, ou capturee aupres du developpeur.
+Ce skill doit documenter une architecture déjà fournie, déjà décidée, ou capturée auprès du développeur.
 Il ne doit pas inventer l'architecture.
-Il ne doit pas produire de code d'implementation.
+Il ne doit pas produire de code d'implémentation.
 
 ## Responsabilites principales
 
