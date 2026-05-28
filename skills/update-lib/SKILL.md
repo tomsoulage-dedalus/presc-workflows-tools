@@ -128,25 +128,49 @@ Si elle existe déjà :
 
 > ⚡ Cette sous-étape n'est exécutée que si `--lib` n'a pas été passé.
 
-Calculer la liste des dépendances **communes** aux deux projets (champ `dependencies` uniquement, pas `devDependencies`) :
+Calculer trois listes à partir du champ `dependencies` (pas `devDependencies`) des deux projets :
+- **communes** : présentes dans les deux
+- **app-only** : présentes uniquement dans `prescription-app`
+- **lib-only** : présentes uniquement dans `prescription-lib`
 
 ```bash
 node -e "
   const app = require('./frontend/prescription-app/package.json').dependencies || {};
   const lib = require('./frontend/prescription-lib/package.json').dependencies || {};
-  const common = Object.keys(app).filter(k => k in lib).sort();
-  common.forEach((name, i) => console.log((i + 1) + ') ' + name + '  ' + app[name]  + '  /  ' + lib[name]));
+  const all = [...new Set([...Object.keys(app), ...Object.keys(lib)])].sort();
+  let i = 1;
+  const common  = all.filter(k => k in app && k in lib);
+  const appOnly = all.filter(k => k in app && !(k in lib));
+  const libOnly = all.filter(k => !(k in app) && k in lib);
+
+  if (common.length) {
+    console.log('── Communes ──────────────────────────────────────────');
+    common.forEach(k => console.log((i++) + ') ' + k + '  ' + app[k] + '  /  ' + lib[k]));
+  }
+  if (appOnly.length) {
+    console.log('── prescription-app uniquement ───────────────────────');
+    appOnly.forEach(k => console.log((i++) + ') ' + k + '  ' + app[k]));
+  }
+  if (libOnly.length) {
+    console.log('── prescription-lib uniquement ───────────────────────');
+    libOnly.forEach(k => console.log((i++) + ') ' + k + '  ' + lib[k]));
+  }
 "
 ```
 
 Afficher la liste sous ce format :
 ```
-📋 Dépendances communes à prescription-app et prescription-lib :
+📋 Dépendances disponibles :
 
+── Communes ──────────────────────────────────────────
  1) @angular/animations         ^20.0.0  /  ^20.0.0
  2) @angular/cdk                ^20.0.0  /  ^20.0.0
  3) @ddm/core                   ^3.4000000.3  /  ^3.4000000.3
  4) @medication-statement/lib   ^3.4000000.4  /  ^3.4000000.4
+── prescription-app uniquement ───────────────────────
+ 5) @some/app-only-lib          ^1.2.0
+── prescription-lib uniquement ───────────────────────
+ 6) @some/lib-only-lib          ^2.0.0
  ...
 
 👉 Entrez le numéro (ou le nom exact) de la lib à mettre à jour :
@@ -189,12 +213,51 @@ Si vide :
 ```
 **Stopper.**
 
-Exécuter `npm update` dans les deux projets frontend :
+Détecter dans quel(s) projet(s) `LIB_NAME` est présent dans les `dependencies` :
 
 ```bash
+node -e "
+  const app = require('./frontend/prescription-app/package.json').dependencies || {};
+  const lib = require('./frontend/prescription-lib/package.json').dependencies || {};
+  const inApp = '${LIB_NAME}' in app;
+  const inLib = '${LIB_NAME}' in lib;
+  if (inApp && inLib) console.log('both');
+  else if (inApp)     console.log('app-only');
+  else if (inLib)     console.log('lib-only');
+  else                console.log('none');
+"
+```
+
+Selon le résultat :
+
+- **`none`** :
+  ```
+  ❌ ${LIB_NAME} introuvable dans les dépendances de prescription-app ni de prescription-lib.
+  ```
+  **Stopper.**
+
+- **`app-only`** : afficher un avertissement informatif et continuer :
+  ```
+  ⚠️  ${LIB_NAME} n'existe que dans prescription-app (absent de prescription-lib).
+  ```
+  Définir : `UPDATE_APP=true`, `UPDATE_LIB_PKG=false`
+
+- **`lib-only`** : afficher un avertissement informatif et continuer :
+  ```
+  ⚠️  ${LIB_NAME} n'existe que dans prescription-lib (absent de prescription-app).
+  ```
+  Définir : `UPDATE_APP=false`, `UPDATE_LIB_PKG=true`
+
+- **`both`** : `UPDATE_APP=true`, `UPDATE_LIB_PKG=true`
+
+Exécuter `npm update` uniquement dans les projets concernés :
+
+```bash
+# Si UPDATE_APP=true :
 cd frontend/prescription-app
 npm update ${LIB_NAME}
 
+# Si UPDATE_LIB_PKG=true :
 cd ../prescription-lib
 npm update ${LIB_NAME}
 ```
@@ -206,11 +269,14 @@ Afficher après chaque commande :
 
 ### Step 4 — Créer le commit
 
-Stager **uniquement** les `package-lock.json` des deux projets.  
-⚠️ Ne jamais appeler `git restore --staged` ni aucune commande qui modifierait l'index en dehors de ces deux fichiers. Les fichiers déjà stagés par l'utilisateur restent intacts.
+Stager **uniquement** les `package-lock.json` des projets mis à jour.  
+⚠️ Ne jamais appeler `git restore --staged` ni aucune commande qui modifierait l'index en dehors de ces fichiers. Les fichiers déjà stagés par l'utilisateur restent intacts.
 
 ```bash
+# Si UPDATE_APP=true :
 git add frontend/prescription-app/package-lock.json
+
+# Si UPDATE_LIB_PKG=true :
 git add frontend/prescription-lib/package-lock.json
 ```
 
@@ -226,11 +292,22 @@ Construire le message de commit :
 COMMIT_MSG="${COMMIT_PREFIX}: update ${LIB_NAME} dependency"
 ```
 
-Committer en passant les chemins explicitement :
+Committer en passant explicitement les chemins des fichiers stagés :
 
 ```bash
+# Si UPDATE_APP=true et UPDATE_LIB_PKG=true :
 git commit \
   frontend/prescription-app/package-lock.json \
+  frontend/prescription-lib/package-lock.json \
+  -m "${COMMIT_MSG}"
+
+# Si UPDATE_APP=true seulement :
+git commit \
+  frontend/prescription-app/package-lock.json \
+  -m "${COMMIT_MSG}"
+
+# Si UPDATE_LIB_PKG=true seulement :
+git commit \
   frontend/prescription-lib/package-lock.json \
   -m "${COMMIT_MSG}"
 ```
@@ -306,7 +383,7 @@ npm start
 ✅ Workflow complete! (mode commit uniquement — relancer avec --test pour tester l'appli)
 
 🌿 Branche  : ${NEW_BRANCH:-${CURRENT_BRANCH} (inchangée)}
-📦 Update   : ${LIB_NAME} mis à jour dans prescription-app et prescription-lib
+📦 Update   : ${LIB_NAME} mis à jour dans <prescription-app et prescription-lib | prescription-app uniquement | prescription-lib uniquement>
 💾 Commit   : ${COMMIT_MSG}
 ```
 
@@ -316,7 +393,7 @@ npm start
 ✅ Workflow complete!
 
 🌿 Branche  : ${NEW_BRANCH:-${CURRENT_BRANCH} (inchangée)}
-📦 Update   : ${LIB_NAME} mis à jour dans prescription-app et prescription-lib
+📦 Update   : ${LIB_NAME} mis à jour dans <prescription-app et prescription-lib | prescription-app uniquement | prescription-lib uniquement>
 💾 Commit   : ${COMMIT_MSG}
 🔧 Proxy    : UPSTREAM_URL → URLS.fr  (frontend/prescription-app/proxy.conf.js)
 🚀 Start    : npm start lancé dans frontend/prescription-app
@@ -335,8 +412,8 @@ npm start
 | Branche `${NEW_BRANCH}` déjà existante | Afficher l'erreur et stopper |
 | HEAD détaché (detached HEAD) | "❌ Detached HEAD non supporté" et stopper |
 | `package.json` absent dans un des deux dossiers | "❌ package.json introuvable dans <dossier>" et stopper |
-| `--lib` fourni mais absent des deux `package.json` | "❌ `${LIB_NAME}` introuvable dans les dépendances communes" et stopper |
-| `--lib` présent dans un seul des deux projets | Avertir et demander confirmation avant de continuer |
+| `--lib` fourni mais absent des deux `package.json` | "❌ `${LIB_NAME}` introuvable dans les dépendances de prescription-app ni de prescription-lib" et stopper |
+| `--lib` présent dans un seul des deux projets | Avertir (sans bloquer) ; mettre à jour uniquement ce projet (npm update + stage + commit du seul package-lock.json concerné) |
 | Choix invalide dans la liste interactive | Afficher `❌ Choix invalide` et re-présenter la liste |
 | `npm update` ne produit aucun changement | Avertir que la lib est déjà à jour et stopper |
 | `npm install` échoue (mode `--test` uniquement) | Afficher le log d'erreur npm et stopper |
