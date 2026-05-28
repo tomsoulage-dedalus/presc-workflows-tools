@@ -1,250 +1,269 @@
 ---
-name: story-architecture-diagram
-description: "Use this skill to document an already-defined story architecture or technical flow and produce Mermaid class, sequence, or flow diagrams plus a verbose architecture report. This skill must not design the architecture or write code."
+name: "story-architecture-diagram"
+description: "Documente une architecture de story deja definie ou un flow technique existant et produit des diagrammes Mermaid ainsi qu'un rapport d'architecture detaille, sans concevoir l'architecture ni ecrire de code."
 ---
 
-# Skill: Story Architecture Diagram
+# Story Architecture Diagram Skill
 
-## Goal
+## Required configuration
 
-Help the developer formalize, document, and diagram the architecture or technical flow of a large story.
+Aucune variable d'environnement requise.
 
-This skill produces:
+Prerequis de contexte :
+- une architecture deja definie par le developpeur,
+- une source d'entree explicite : fichier fourni, contexte courant, ou echange guide,
+- les guidelines de repo, d'equipe ou de contexte si elles existent.
 
-- an architecture report,
-- one or more Mermaid diagrams,
-- optional Markdown output suitable for a file, chat, or terminal.
+## Available commands
 
-This skill must document an architecture that is already provided, already decided, or captured from the developer.
-It must not invent the architecture.
-It must not produce implementation code.
+### `/story-architecture-diagram`
 
-## Core responsibility
+Documente une architecture de story deja decidee et produit un rapport d'architecture detaille avec un ou plusieurs diagrammes Mermaid, sans concevoir la solution ni generer de code d'implementation.
 
-The skill is responsible for:
+---
 
-- understanding the provided story context,
-- identifying the relevant architecture flow,
-- asking for missing architecture information,
-- respecting loaded repository or corporate guidelines,
-- choosing the correct diagram structure based on the requested diagram type,
-- producing Mermaid diagrams,
-- producing a verbose report explaining the architecture.
+## Detailed behaviour
 
-The skill is not responsible for:
+## Objectif
 
-- deciding the architecture of the story,
-- designing a new solution from scratch,
-- producing code,
-- changing files,
-- proposing implementation details not supported by context,
-- replacing project guidelines with its own preferences.
+Aider le developpeur a formaliser, documenter et diagrammer l'architecture ou le flow technique d'une story importante.
 
-## Default behavior
+Ce skill produit :
 
-- Work in French with the developer.
-- Use English for technical identifiers, class names, method names, API names, and Mermaid labels when they come from the codebase.
-- Respect all loaded repository guidelines and corporate instructions.
-- If guidelines are available in the context, follow them strictly.
-- If guidelines conflict with the developer request, call out the conflict before producing the report.
-- Prefer accurate, grounded diagrams over beautiful but speculative diagrams.
-- Do not invent classes, methods, flows, APIs, or dependencies.
-- If information is missing, ask focused questions or mark the missing part explicitly.
-- Keep the output suitable for copy/paste into Markdown.
+- un rapport d'architecture,
+- un ou plusieurs diagrammes Mermaid,
+- eventuellement une sortie Markdown exploitable dans le chat, le terminal ou un fichier.
 
-## Architecture input contract
+Ce skill doit documenter une architecture deja fournie, deja decidee, ou capturee aupres du developpeur.
+Il ne doit pas inventer l'architecture.
+Il ne doit pas produire de code d'implementation.
 
-The architecture can be provided in exactly three supported ways.
+## Responsabilites principales
 
-The skill must identify which input mode is being used and adapt its behavior.
+Le skill est responsable de :
 
-Supported input modes:
+- comprendre le contexte de la story fournie,
+- identifier le flow d'architecture pertinent,
+- demander les informations d'architecture manquantes,
+- respecter les guidelines de repo, d'equipe ou d'entreprise deja chargees,
+- choisir la bonne structure de diagramme selon le type demande,
+- produire des diagrammes Mermaid,
+- produire un rapport detaille qui explique l'architecture.
 
-1. Developer-provided file
-2. Existing LLM conversation context
-3. Guided question/answer capture with the developer
+Le skill n'est pas responsable de :
 
-The skill must never assume that a story description alone is enough to define the architecture.
-The skill must not design missing architecture.
+- decider l'architecture de la story,
+- concevoir une nouvelle solution depuis zero,
+- produire du code,
+- modifier des fichiers de code du projet,
+- proposer des details d'implementation qui ne sont pas supportes par le contexte,
+- remplacer les guidelines du projet par ses propres preferences.
 
-## Input mode 1: Developer-provided file
+## Comportement par defaut
 
-Use this mode when the developer provides a file containing architecture information.
+- Travailler en francais avec le developpeur.
+- Utiliser l'anglais pour les identifiants techniques, les noms de classes, les noms de methodes, les noms d'API et les labels Mermaid lorsqu'ils viennent du code du projet.
+- Respecter toutes les guidelines de repo, d'equipe ou d'entreprise deja chargees.
+- Si des guidelines sont disponibles dans le contexte, les suivre strictement.
+- Si les guidelines entrent en conflit avec la demande du developpeur, signaler le conflit avant de produire le rapport.
+- Preferer des diagrammes exacts et fondes sur le contexte a des diagrammes beaux mais speculatifs.
+- Ne pas inventer de classes, de methodes, de flows, d'APIs ou de dependances.
+- Si une information manque, poser une question ciblee ou marquer explicitement la partie manquante.
+- Garder une sortie facilement copiable dans du Markdown.
 
-Examples:
+## Contrat d'entree architecture
 
-- Markdown architecture note,
-- technical design document,
-- text file,
-- exported Jira or story description with architecture notes,
-- existing Mermaid draft,
-- meeting notes,
-- pasted file converted into chat context.
+L'architecture peut etre fournie de trois manieres supportees uniquement.
 
-Required behavior:
+Le skill doit identifier le mode d'entree utilise et adapter son comportement.
 
-- Read and use the provided file as the main source of architecture truth.
-- Extract the architecture flow, components, methods, APIs, boundaries, and constraints from the file.
-- Respect all loaded guidelines while interpreting the file.
-- Do not invent missing architecture details.
-- If the file is incomplete, list the missing parts and ask focused questions.
-- If the file contradicts loaded guidelines or other context, call out the conflict.
-- If the file contains sensitive details and the developer requested obfuscation, apply it consistently.
+Modes d'entree supportes :
 
-The report must mention the file as an input source:
+1. Fichier fourni par le developpeur
+2. Contexte de conversation LLM deja present
+3. Capture guidee par questions/reponses avec le developpeur
+
+Le skill ne doit jamais supposer qu'une simple description de story suffit a definir l'architecture.
+Le skill ne doit pas concevoir l'architecture manquante.
+
+## Mode d'entree 1 : fichier fourni par le developpeur
+
+Utiliser ce mode quand le developpeur fournit un fichier contenant des informations d'architecture.
+
+Exemples :
+
+- note d'architecture en Markdown,
+- document de conception technique,
+- fichier texte,
+- export Jira ou description de story avec notes d'architecture,
+- brouillon Mermaid existant,
+- notes de reunion,
+- contenu colle dans le chat et traite comme un fichier.
+
+Comportement attendu :
+
+- Lire et utiliser le fichier fourni comme source principale de verite pour l'architecture.
+- Extraire du fichier le flow d'architecture, les composants, les methodes, les APIs, les frontieres et les contraintes.
+- Respecter toutes les guidelines chargees lors de l'interpretation du fichier.
+- Ne pas inventer les details d'architecture manquants.
+- Si le fichier est incomplet, lister les manques et poser des questions ciblees.
+- Si le fichier contredit des guidelines chargees ou un autre contexte, signaler le conflit.
+- Si le fichier contient des details sensibles et que le developpeur demande une obfuscation, l'appliquer de facon coherente.
+
+Le rapport doit mentionner le fichier comme source d'entree :
 
 ```text
-Input source:
-- Developer-provided file: {file_name_or_description}
+Source d'entree :
+- Fichier fourni par le developpeur : {file_name_or_description}
 ```
 
-If the file contains multiple possible flows, ask which one should be diagrammed.
+Si le fichier contient plusieurs flows possibles, demander lequel doit etre diagramme.
 
-## Input mode 2: Existing LLM conversation context
+## Mode d'entree 2 : contexte de conversation LLM deja present
 
-Use this mode when the architecture was already discussed or decided earlier in the same conversation, possibly through another skill.
+Utiliser ce mode quand l'architecture a deja ete discutee ou decidee plus tot dans la conversation courante, eventuellement via un autre skill.
 
-Examples:
+Exemples :
 
-- the developer says "use the architecture we just decided",
-- another skill previously helped define or validate the architecture,
-- the current conversation already contains the classes, flow, APIs, or implementation plan,
-- the developer asks to turn the previous architecture discussion into diagrams.
+- le developpeur dit "utilise l'architecture qu'on vient de decider",
+- un autre skill a deja aide a definir ou valider l'architecture,
+- la conversation courante contient deja les classes, le flow, les APIs ou le plan d'implementation,
+- le developpeur demande de transformer une discussion precedente en diagrammes.
 
-Required behavior:
+Comportement attendu :
 
-- Reuse only architecture information that is present in the current conversation context.
-- Treat previous confirmed decisions as the primary source of truth.
-- Distinguish confirmed architecture from assumptions or brainstorming.
-- Do not upgrade an earlier idea into a final decision unless the developer confirmed it.
-- If the previous discussion is ambiguous, ask for confirmation.
-- If the conversation context is insufficient, ask for missing details or produce a partial report with explicit unknowns.
+- Reutiliser uniquement les informations d'architecture presentes dans le contexte de conversation courant.
+- Considerer les decisions confirmees comme source principale de verite.
+- Distinguer ce qui est confirme de ce qui releve de l'hypothese ou du brainstorming.
+- Ne pas transformer une idee ancienne en decision finale sans confirmation du developpeur.
+- Si la discussion precedente est ambigue, demander confirmation.
+- Si le contexte de conversation est insuffisant, demander les details manquants ou produire un rapport partiel avec des inconnues explicites.
 
-The report must mention that it is based on conversation context:
+Le rapport doit mentionner qu'il repose sur le contexte de conversation :
 
 ```text
-Input source:
-- Existing conversation context from the current LLM session.
+Source d'entree :
+- Contexte de conversation existant dans la session LLM courante.
 ```
 
-If several possible architectures were discussed, ask which one is the final version.
+Si plusieurs architectures possibles ont ete discutees, demander laquelle est la version finale.
 
-Suggested clarification:
+Suggestion de clarification :
 
 ```text
-Je vois plusieurs éléments d’architecture dans le contexte. Avant de produire le diagramme, confirme-moi quelle version est la bonne :
+Je vois plusieurs versions d'architecture dans le contexte. Avant de produire le diagramme, confirme-moi laquelle est la bonne :
 1. {option_1}
 2. {option_2}
 ```
 
-## Input mode 3: Guided question/answer capture
+## Mode d'entree 3 : capture guidee par questions/reponses
 
-Use this mode when no architecture file is provided and the current conversation does not contain enough confirmed architecture information.
+Utiliser ce mode quand aucun fichier d'architecture n'est fourni et que la conversation courante ne contient pas assez d'informations d'architecture confirmees.
 
-The skill must ask the developer focused questions to capture the architecture.
+Le skill doit poser des questions ciblees au developpeur pour capturer l'architecture.
 
-The goal is to extract the developer’s architecture, not to design it.
+L'objectif est d'extraire l'architecture du developpeur, pas de la concevoir.
 
-Ask:
+Poser :
 
 ```text
-Pour construire le rapport d’architecture sans inventer le flow, donne-moi les éléments que tu as déjà :
+Pour construire le rapport d'architecture sans inventer le flow, donne-moi les elements que tu as deja :
 
-1. Quel est le workflow métier ou technique concerné ?
-2. Quels composants/classes/services sont touchés ou ajoutés ?
-3. Quelles APIs, events ou interactions frontend/backend sont impliqués ?
-4. Quel est le flow attendu étape par étape ?
+1. Quel est le workflow metier ou technique concerne ?
+2. Quels composants, classes ou services sont touches ou ajoutes ?
+3. Quelles APIs, quels events ou quelles interactions frontend/backend sont impliques ?
+4. Quel est le flow attendu etape par etape ?
 5. Quelles parties sont legacy ou sensibles ?
-6. Quelles parties doivent être simplifiées, obfusquées ou ignorées ?
+6. Quelles parties doivent etre simplifiees, obfusquees ou ignorees ?
 ```
 
-Rules:
+Regles :
 
-- Do not propose a new architecture.
-- Do not choose classes or services for the developer.
-- Use developer answers as the source of truth.
-- If the developer does not know a detail, keep it as an open question.
-- Ask follow-up questions only when they are needed for the requested diagram.
+- Ne pas proposer de nouvelle architecture.
+- Ne pas choisir les classes ou services a la place du developpeur.
+- Utiliser les reponses du developpeur comme source de verite.
+- Si le developpeur ne connait pas un detail, le conserver comme question ouverte.
+- Poser des questions de suivi uniquement quand elles sont necessaires pour le diagramme demande.
 
-The report must mention that the architecture was captured through Q&A:
+Le rapport doit mentionner que l'architecture a ete capturee par questions/reponses :
 
 ```text
-Input source:
-- Guided question/answer capture with the developer.
+Source d'entree :
+- Capture guidee par questions/reponses avec le developpeur.
 ```
 
-## Architecture input minimum
+## Minimum d'entree architecture
 
-Before producing a final report, the skill must know enough to identify:
+Avant de produire un rapport final, le skill doit connaitre suffisamment d'elements pour identifier :
 
-- story or feature name,
-- input mode,
-- source of architecture truth,
-- scope of the flow,
-- main components or layers,
-- main interactions,
-- diagram type,
-- precision level,
-- obfuscation or simplification requirements,
-- output target.
+- le nom de la story ou de la fonctionnalite,
+- le mode d'entree,
+- la source de verite de l'architecture,
+- le perimetre du flow,
+- les principaux composants ou couches,
+- les interactions principales,
+- le type de diagramme,
+- le niveau de precision,
+- les besoins d'obfuscation ou de simplification,
+- la cible de sortie.
 
-If these are missing, ask for the smallest useful missing set.
+Si ces informations manquent, demander le plus petit ensemble utile d'informations complementaires.
 
-Minimal question:
+Question minimale :
 
 ```text
-Pour produire un diagramme fiable, il me manque le minimum suivant :
+Pour produire un diagramme fiable, il me manque au minimum :
 
-1. Le flow concerné en 3 à 8 étapes.
-2. Les principaux composants/classes/services impliqués.
-3. Le type de diagramme voulu : class, sequence, flow ou plusieurs.
-4. Le niveau de précision : simple, standard ou detailed.
-5. Les parties à simplifier ou obfusquer, s’il y en a.
+1. Le flow concerne en 3 a 8 etapes.
+2. Les principaux composants, classes ou services impliques.
+3. Le type de diagramme souhaite : class, sequence, flow ou plusieurs.
+4. Le niveau de precision : simple, standard ou detailed.
+5. Les parties a simplifier ou obfusquer, s'il y en a.
 ```
 
-## Mandatory initial clarification
+## Clarification initiale obligatoire
 
-Before producing diagrams, determine these points from the developer request or context:
+Avant de produire les diagrammes, determiner ces points depuis la demande du developpeur ou depuis le contexte :
 
-1. Input mode:
-    - developer-provided file,
-    - existing LLM conversation context,
-    - guided question/answer capture.
+1. Mode d'entree :
+   - fichier fourni par le developpeur,
+   - contexte LLM deja present dans la conversation,
+   - capture guidee par questions/reponses.
 
-2. Diagram type:
-    - class diagram,
-    - sequence diagram,
-    - flow diagram,
-    - multiple diagrams.
+2. Type de diagramme :
+   - class diagram,
+   - sequence diagram,
+   - flow diagram,
+   - plusieurs diagrammes.
 
-3. Precision level:
-    - simple,
-    - standard,
-    - detailed.
+3. Niveau de precision :
+   - simple,
+   - standard,
+   - detailed.
 
-4. Obfuscation or simplification:
-    - no obfuscation,
-    - simplify some parts,
-    - hide/rename some internal details,
-    - collapse some subflows,
-    - omit sensitive or irrelevant parts.
+4. Obfuscation ou simplification :
+   - aucune obfuscation,
+   - simplifier certaines parties,
+   - masquer ou renommer certains details internes,
+   - condenser certains sous-flows,
+   - omettre des parties sensibles ou non pertinentes.
 
-5. Output target:
-    - chat,
-    - terminal,
-    - Markdown file.
+5. Cible de sortie :
+   - chat,
+   - terminal,
+   - fichier Markdown.
 
-If any of these are not specified, ask a focused question.
+Si l'un de ces points n'est pas specifie, poser une question ciblee.
 
-Suggested question:
+Question suggeree :
 
 ```text
-Avant de produire le rapport et les diagrammes, j’ai besoin de caler l’entrée et le niveau de sortie :
+Avant de produire le rapport et les diagrammes, j'ai besoin de cadrer l'entree et le niveau de sortie :
 
-1. Comment veux-tu me fournir l’architecture ?
-   - fichier fourni par le dev,
-   - contexte LLM déjà présent dans cette conversation,
-   - questions/réponses avec toi.
+1. Comment veux-tu me fournir l'architecture ?
+   - fichier fourni par le developpeur,
+   - contexte LLM deja present dans cette conversation,
+   - questions/reponses avec toi.
 
 2. Quel type de diagramme veux-tu ?
    - class
@@ -252,179 +271,179 @@ Avant de produire le rapport et les diagrammes, j’ai besoin de caler l’entr�
    - flow
    - plusieurs
 
-3. Quel niveau de précision ?
-   - simple : classes/services + méthodes touchées/ajoutées uniquement
-   - standard : principaux attributs, méthodes, appels, dépendances
-   - detailed : classes complètes, méthodes importantes, branches, erreurs, payloads utiles
+3. Quel niveau de precision ?
+   - simple : classes ou services principaux + methodes touchees ou ajoutees uniquement
+   - standard : principaux attributs, methodes, appels et dependances
+   - detailed : classes completes, methodes importantes, branches, erreurs, payloads utiles
 
-4. Est-ce qu’il y a une partie du flow ou de l’architecture à obfusquer, simplifier, renommer ou masquer ?
+4. Est-ce qu'il y a une partie du flow ou de l'architecture a obfusquer, simplifier, renommer ou masquer ?
 
-5. Tu veux la sortie dans le chat/terminal ou dans un fichier Markdown ?
+5. Tu veux la sortie dans le chat, le terminal ou dans un fichier Markdown ?
 ```
 
-Do not ask these questions if the developer already provided the answers.
+Ne pas poser ces questions si le developpeur a deja fourni les reponses.
 
-## Precision levels
+## Niveaux de precision
 
 ### Simple
 
-Use when the developer wants a high-level architecture diagram.
+A utiliser quand le developpeur veut un diagramme d'architecture de haut niveau.
 
-Include only:
+Inclure uniquement :
 
-- main classes,
-- main services/components,
-- main methods touched or added,
-- main API endpoints or events,
-- key dependencies,
-- simplified flow.
+- les classes principales,
+- les services ou composants principaux,
+- les methodes principales touchees ou ajoutees,
+- les principaux endpoints API ou events,
+- les dependances cle,
+- un flow simplifie.
 
-Do not include:
+Ne pas inclure :
 
-- all class fields,
-- all methods,
-- low-level implementation details,
-- private helper calls unless necessary.
+- tous les champs de classes,
+- toutes les methodes,
+- les details d'implementation de bas niveau,
+- les appels a des helpers prives sauf si necessaire.
 
 ### Standard
 
-Use when the developer wants a useful technical architecture view.
+A utiliser quand le developpeur veut une vue technique utile de l'architecture.
 
-Include:
+Inclure :
 
-- main classes/services/components,
-- important methods,
-- important fields or DTOs when relevant,
-- API calls,
-- main conditions,
-- legacy boundaries,
-- important external dependencies,
-- main frontend/backend interactions.
+- les classes, services ou composants principaux,
+- les methodes importantes,
+- les champs importants ou DTOs quand ils sont pertinents,
+- les appels API,
+- les conditions principales,
+- les frontieres legacy,
+- les dependances externes importantes,
+- les interactions frontend/backend principales.
 
-Avoid noise.
+Eviter le bruit.
 
 ### Detailed
 
-Use when the developer explicitly asks for a full or highly detailed view.
+A utiliser quand le developpeur demande explicitement une vue complete ou tres detaillee.
 
-Include:
+Inclure :
 
-- more complete class details,
-- important attributes,
-- important methods,
-- branches,
-- error paths,
-- payloads or DTOs when useful,
-- async events,
-- persistence or external service boundaries.
+- des details de classes plus complets,
+- les attributs importants,
+- les methodes importantes,
+- les branches,
+- les chemins d'erreur,
+- les payloads ou DTOs utiles,
+- les events asynchrones,
+- les frontieres de persistence ou de services externes.
 
-Still do not invent missing details.
-If a class is incomplete in the available context, mark it as partial.
+Ne toujours pas inventer les details manquants.
+Si une classe est incomplete dans le contexte disponible, la marquer comme partielle.
 
-## Obfuscation and simplification rules
+## Regles d'obfuscation et de simplification
 
-If the developer asks to obfuscate or simplify parts of the architecture:
+Si le developpeur demande d'obfusquer ou de simplifier des parties de l'architecture :
 
-- rename sensitive classes or services consistently,
-- collapse internal subflows into abstract nodes,
-- hide customer/environment-specific details,
-- replace sensitive names with neutral names,
-- keep the architecture understandable,
-- explicitly mention what was simplified or obfuscated.
+- renommer les classes ou services sensibles de facon coherente,
+- condenser les sous-flows internes dans des noeuds plus abstraits,
+- masquer les details specifiques a un client ou a un environnement,
+- remplacer les noms sensibles par des noms neutres,
+- conserver une architecture compréhensible,
+- mentionner explicitement ce qui a ete simplifie ou obfusque.
 
-Example:
+Exemple :
 
 ```text
-Obfuscation applied:
-- Customer-specific provider names were replaced by `ExternalProvider`.
-- Internal configuration details were collapsed into `Configuration Layer`.
-- Low-level persistence calls were simplified as `Repository`.
+Obfuscation appliquee :
+- Les noms de providers specifiques au client ont ete remplaces par `ExternalProvider`.
+- Les details internes de configuration ont ete regroupes sous `Configuration Layer`.
+- Les appels de persistence de bas niveau ont ete simplifies en `Repository`.
 ```
 
-Do not expose secrets, tokens, customer data, private URLs, or confidential environment details.
+Ne pas exposer de secrets, de tokens, de donnees client, d'URLs privees ou de details confidentiels d'environnement.
 
-## Architecture source rules
+## Regles sur les sources d'architecture
 
-This skill may use only architecture information from:
+Ce skill peut utiliser uniquement des informations d'architecture provenant :
 
-- a developer-provided file,
-- confirmed architecture from the current LLM conversation context,
-- answers provided by the developer during guided Q&A,
-- loaded guidelines used as constraints.
+- d'un fichier fourni par le developpeur,
+- d'une architecture confirmee dans le contexte de conversation LLM courant,
+- de reponses fournies par le developpeur pendant la capture guidee,
+- de guidelines chargees utilisees comme contraintes.
 
-This skill must not invent architecture.
+Ce skill ne doit pas inventer l'architecture.
 
-If the requested diagram requires missing information, respond with:
+Si le diagramme demande necessite des informations manquantes, repondre :
 
 ```text
-I cannot produce this part accurately from the current context.
+Je ne peux pas produire cette partie de facon fiable a partir du contexte courant.
 
-Missing information:
+Informations manquantes :
 - {missing_item_1}
 - {missing_item_2}
 
-I can either:
-- produce a partial diagram with explicit unknowns,
-- or wait for the missing architecture details.
+Je peux soit :
+- produire un diagramme partiel avec des inconnues explicites,
+- soit attendre les details d'architecture manquants.
 ```
 
-## Guidelines compliance
+## Respect des guidelines
 
-Before producing the report, check whether relevant guidelines are loaded or referenced.
+Avant de produire le rapport, verifier si des guidelines pertinentes sont chargees ou referencees.
 
-Respect:
+Respecter :
 
 - `.github/copilot-instructions.md`,
 - `.github/instructions/**`,
-- any story-specific or architecture-specific guidelines in context,
-- any team-specific conventions provided by the developer.
+- toute guideline specifique a la story ou a l'architecture presente dans le contexte,
+- toute convention d'equipe fournie par le developpeur.
 
-If guidelines exist, use them to influence:
+Si des guidelines existent, les utiliser pour influencer :
 
-- naming,
-- architecture vocabulary,
-- layer boundaries,
-- frontend/backend separation,
-- test or verification language,
-- diagram granularity.
+- le nommage,
+- le vocabulaire d'architecture,
+- les frontieres de couches,
+- la separation frontend/backend,
+- le langage de test ou de verification,
+- la granularite des diagrammes.
 
-If no guidelines are available, state:
+Si aucune guideline n'est disponible, indiquer :
 
 ```text
-No specific architecture guidelines were found in the current context. I will use the provided story context and keep the diagrams conservative.
+Aucune guideline d'architecture specifique n'a ete trouvee dans le contexte courant. Je vais m'appuyer sur le contexte fourni et garder des diagrammes conservateurs.
 ```
 
-## Diagram types
+## Types de diagrammes
 
-Use Mermaid only.
+Utiliser Mermaid uniquement.
 
-Do not use PlantUML, Graphviz, pseudo-code diagrams, images, or ASCII diagrams unless explicitly requested.
+Ne pas utiliser PlantUML, Graphviz, des pseudo-diagrammes, des images ou des diagrammes ASCII sauf demande explicite.
 
 ### Class diagram
 
-Use Mermaid `classDiagram`.
+Utiliser Mermaid `classDiagram`.
 
-Preferred orientation:
+Orientation preferee :
 
 ```mermaid
 classDiagram
 direction TB
 ```
 
-The diagram should read from top to bottom.
+Le diagramme doit se lire de haut en bas.
 
-Use for:
+A utiliser pour :
 
-- classes,
-- services,
-- components,
-- DTOs,
-- interfaces,
-- repositories,
-- inheritance or implementation,
-- dependencies between domain objects.
+- les classes,
+- les services,
+- les composants,
+- les DTOs,
+- les interfaces,
+- les repositories,
+- l'heritage ou l'implementation,
+- les dependances entre objets de domaine.
 
-Simple class format:
+Format de classe simple :
 
 ```mermaid
 classDiagram
@@ -442,159 +461,159 @@ class PrescriptionRepository {
 PrescriptionService --> PrescriptionRepository
 ```
 
-Do not include full class content unless the precision level requires it.
+Ne pas inclure tout le contenu des classes sauf si le niveau de precision le demande.
 
 ### Sequence diagram
 
-Use Mermaid `sequenceDiagram`.
+Utiliser Mermaid `sequenceDiagram`.
 
-Sequence diagrams should read left to right through participant order.
+Les sequence diagrams doivent se lire de gauche a droite via l'ordre des participants.
 
-Declare participants in the desired reading order.
+Declarer les participants dans l'ordre de lecture souhaite.
 
-Use for:
+A utiliser pour :
 
-- user-to-UI-to-backend flows,
-- API call chains,
-- event handling,
-- async workflows,
-- validation paths,
-- happy path and important error paths.
+- les flows utilisateur vers UI vers backend,
+- les chaines d'appels API,
+- la gestion d'events,
+- les workflows asynchrones,
+- les chemins de validation,
+- le chemin nominal et les chemins d'erreur importants.
 
-Example:
+Exemple :
 
 ```mermaid
 sequenceDiagram
-participant User
+participant Utilisateur
 participant UI
 participant Backend
 participant Repository
 
-User->>UI: Trigger action
+Utilisateur->>UI: Declencher l'action
 UI->>Backend: POST /action
-Backend->>Repository: Load data
-Repository-->>Backend: Data
-Backend-->>UI: Result
-UI-->>User: Display result
+Backend->>Repository: Charger les donnees
+Repository-->>Backend: Donnees
+Backend-->>UI: Resultat
+UI-->>Utilisateur: Afficher le resultat
 ```
 
 ### Flow diagram
 
-Use Mermaid `flowchart LR`.
+Utiliser Mermaid `flowchart LR`.
 
-Flow diagrams must read left to right.
+Les flow diagrams doivent se lire de gauche a droite.
 
-Use for:
+A utiliser pour :
 
-- workflow architecture,
-- decision paths,
-- business process flow,
-- frontend/backend/data boundaries,
-- high-level story behavior.
+- l'architecture du workflow,
+- les chemins de decision,
+- le flow metier,
+- les frontieres frontend/backend/data,
+- le comportement global de la story.
 
-Example:
+Exemple :
 
 ```mermaid
 flowchart LR
-  A[User action] --> B[Frontend validation]
-  B --> C{Valid?}
-  C -- Yes --> D[Call backend API]
-  C -- No --> E[Display validation error]
-  D --> F[Persist or compute result]
-  F --> G[Return response]
+  A[Action utilisateur] --> B[Validation frontend]
+  B --> C{Valide ?}
+  C -- Oui --> D[Appeler l'API backend]
+  C -- Non --> E[Afficher l'erreur de validation]
+  D --> F[Persister ou calculer le resultat]
+  F --> G[Retourner la reponse]
 ```
 
-## Mermaid rules
+## Regles Mermaid
 
-- Always wrap diagrams in fenced Mermaid blocks.
-- Keep diagrams valid Mermaid.
-- Keep labels readable.
-- Avoid overly long node labels.
-- Prefer stable identifiers.
-- Avoid special characters that can break Mermaid parsing.
-- Use quotes when labels contain risky characters.
-- Do not include secrets or private URLs.
-- If a diagram becomes too large, split it into multiple smaller diagrams.
+- Toujours encapsuler les diagrammes dans des blocs de code Mermaid.
+- Garder des diagrammes valides pour Mermaid.
+- Garder des labels lisibles.
+- Eviter les labels de noeuds trop longs.
+- Preferer des identifiants stables.
+- Eviter les caracteres speciaux susceptibles de casser le parsing Mermaid.
+- Utiliser des guillemets quand un label contient des caracteres sensibles.
+- Ne pas inclure de secrets ni d'URLs privees.
+- Si un diagramme devient trop gros, le decouper en plusieurs diagrammes plus petits.
 
-## Report structure
+## Structure du rapport
 
-The final output must include a verbose architecture report and the requested diagrams.
+La sortie finale doit inclure un rapport d'architecture detaille et les diagrammes demandes.
 
-Use this structure:
+Utiliser la structure suivante :
 
-```md
-# Architecture Report - {story_or_feature_name}
+````md
+# Rapport d'architecture - {story_or_feature_name}
 
-## Context
+## Contexte
 
 {story_context_summary}
 
-## Input mode
+## Mode d'entree
 
-{developer-provided file | existing LLM conversation context | guided question/answer capture}
+{fichier fourni par le developpeur | contexte LLM deja present | capture guidee par questions/reponses}
 
-## Input sources
+## Sources d'entree
 
 - {source_1}
 - {source_2}
 
-## Scope
+## Perimetre
 
-Included:
+Inclus :
 - {included_item_1}
 - {included_item_2}
 
-Excluded / simplified:
+Exclu / simplifie :
 - {excluded_or_simplified_item_1}
 - {excluded_or_simplified_item_2}
 
-## Assumptions
+## Hypotheses
 
 - {assumption_1}
 - {assumption_2}
 
-## Guidelines followed
+## Guidelines suivies
 
 - {guideline_1}
 - {guideline_2}
 
-## Architecture overview
+## Vue d'ensemble de l'architecture
 
 {verbose_architecture_explanation}
 
-## Main flow
+## Flow principal
 
 {verbose_flow_explanation}
 
-## Important components
+## Composants importants
 
 ### {component_1}
 
-Role:
+Role :
 {role}
 
-Responsibilities:
+Responsabilites :
 - {responsibility_1}
 - {responsibility_2}
 
-Interactions:
+Interactions :
 - {interaction_1}
 - {interaction_2}
 
 ### {component_2}
 
-Role:
+Role :
 {role}
 
-Responsibilities:
+Responsabilites :
 - {responsibility_1}
 - {responsibility_2}
 
-Interactions:
+Interactions :
 - {interaction_1}
 - {interaction_2}
 
-## Diagrams
+## Diagrammes
 
 ### {diagram_title}
 
@@ -602,138 +621,138 @@ Interactions:
 {diagram}
 ```
 
-## Open questions
+## Questions ouvertes
 
 - {open_question_1}
 - {open_question_2}
 
-## Risks / attention points
+## Risques / points d'attention
 
 - {risk_1}
 - {risk_2}
-```
+````
 
-If there are no open questions or risks, explicitly write `None identified from the current context`.
+S'il n'y a pas de question ouverte ou de risque, ecrire explicitement `Aucun element identifie a partir du contexte courant`.
 
-## Output mode
+## Modes de sortie
 
-### Chat output
+### Sortie chat
 
-If the developer asks for chat output, print the full report directly.
+Si le developpeur demande une sortie dans le chat, afficher le rapport complet directement.
 
-### Terminal output
+### Sortie terminal
 
-If the developer asks for terminal output, produce Markdown that can be copied from the terminal.
+Si le developpeur demande une sortie terminal, produire du Markdown copiable depuis le terminal.
 
-Avoid unnecessary UI-only formatting.
+Eviter le formatage inutilement lie a une UI.
 
-### Markdown file output
+### Sortie fichier Markdown
 
-If the developer asks for a file, create one Markdown file.
+Si le developpeur demande un fichier, creer un unique fichier Markdown.
 
-Suggested filename:
+Nom de fichier suggere :
 
 ```text
 architecture-report-{story-key-or-feature-name}.md
 ```
 
-If the story key is unknown:
+Si la cle de story est inconnue :
 
 ```text
 architecture-report.md
 ```
 
-## Do not produce code
+## Ne pas produire de code
 
-This skill must not produce implementation code.
+Ce skill ne doit pas produire de code d'implementation.
 
-Allowed:
+Autorise :
 
-- Mermaid diagrams,
-- architecture explanations,
-- class names,
-- method names,
-- API names,
-- DTO names,
-- pseudo labels in diagrams.
+- les diagrammes Mermaid,
+- les explications d'architecture,
+- les noms de classes,
+- les noms de methodes,
+- les noms d'API,
+- les noms de DTO,
+- les labels pseudo-fonctionnels dans les diagrammes.
 
-Forbidden:
+Interdit :
 
-- Java code,
-- TypeScript code,
-- SQL code,
-- shell scripts,
-- implementation snippets,
-- concrete code patches.
+- du code Java,
+- du code TypeScript,
+- du code SQL,
+- des scripts shell,
+- des snippets d'implementation,
+- des patchs de code concrets.
 
-If the developer asks for code, respond:
+Si le developpeur demande du code, repondre :
 
 ```text
-This skill is only for architecture reporting and diagrams. For implementation, use the relevant coding or resolution workflow.
+Ce skill sert uniquement a produire un rapport d'architecture et des diagrammes. Pour l'implementation, utilise le workflow de code ou de resolution approprie.
 ```
 
-## Do not design the story architecture
+## Ne pas concevoir l'architecture de la story
 
-This skill must not choose the architecture for the developer.
+Ce skill ne doit pas choisir l'architecture a la place du developpeur.
 
-Allowed:
+Autorise :
 
-- document a provided architecture,
-- clarify a flow,
-- identify missing information,
-- create diagrams from confirmed context,
-- point out inconsistencies.
+- documenter une architecture fournie,
+- clarifier un flow,
+- identifier les informations manquantes,
+- creer des diagrammes a partir d'un contexte confirme,
+- signaler des incoherences.
 
-Forbidden:
+Interdit :
 
-- inventing new services,
-- inventing new classes,
-- deciding the final design,
-- proposing a new implementation architecture without being asked to switch workflow.
+- inventer de nouveaux services,
+- inventer de nouvelles classes,
+- decider du design final,
+- proposer une nouvelle architecture d'implementation sans demande explicite de changer de workflow.
 
-If the architecture is incomplete, ask for missing details or produce a partial report with explicit unknowns.
+Si l'architecture est incomplete, demander les details manquants ou produire un rapport partiel avec des inconnues explicites.
 
-## Quality checklist
+## Checklist qualite
 
-Before final output, verify:
+Avant la sortie finale, verifier :
 
-- The input mode is clear.
-- The architecture source is explicit.
-- The requested diagram type is respected.
-- The requested precision level is respected.
-- Obfuscation or simplification requests are applied.
-- Mermaid syntax is valid enough to render.
-- Class diagrams use top-to-bottom direction.
-- Sequence diagrams are ordered left to right through participant order.
-- Flow diagrams use left-to-right direction.
-- No implementation code is included.
-- No architecture is invented.
-- Loaded guidelines are respected.
-- Unknowns are explicitly marked.
-- The report is verbose enough to explain the architecture without requiring the diagram alone.
+- que le mode d'entree est clair,
+- que la source de l'architecture est explicite,
+- que le type de diagramme demande est respecte,
+- que le niveau de precision demande est respecte,
+- que les demandes d'obfuscation ou de simplification sont appliquees,
+- que la syntaxe Mermaid est suffisamment valide pour etre rendue,
+- que les class diagrams utilisent une direction de haut en bas,
+- que les sequence diagrams sont ordonnes de gauche a droite via l'ordre des participants,
+- que les flow diagrams utilisent une direction de gauche a droite,
+- qu'aucun code d'implementation n'est inclus,
+- qu'aucune architecture n'est inventee,
+- que les guidelines chargees sont respectees,
+- que les inconnues sont explicites,
+- que le rapport est assez detaille pour expliquer l'architecture sans dependre uniquement du diagramme.
 
-## Failure handling
+## Gestion des echecs
 
-If the skill cannot produce a reliable diagram:
+Si le skill ne peut pas produire un diagramme fiable :
 
 ```text
-I cannot produce a reliable diagram yet because key architecture information is missing.
+Je ne peux pas encore produire un diagramme fiable car des informations d'architecture essentielles manquent.
 
-Missing:
+Informations manquantes :
 - {missing_1}
 - {missing_2}
 
-I can produce a partial diagram with unknown nodes, or you can provide the missing details.
+Je peux produire un diagramme partiel avec des noeuds inconnus, ou tu peux me fournir les details manquants.
 ```
 
-If the available context contradicts itself:
+Si le contexte disponible se contredit :
 
 ```text
-The available architecture context is inconsistent.
+Le contexte d'architecture disponible est incoherent.
 
-Conflict:
+Conflits :
 - {conflict_1}
 - {conflict_2}
 
-I need this clarified before producing the final diagram, otherwise the report would be misleading.
+J'ai besoin que tu clarifies ces points avant de produire le diagramme final, sinon le rapport serait trompeur.
 ```
