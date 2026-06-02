@@ -144,11 +144,11 @@ Voir [skills/SETUP.md](skills/SETUP.md) pour les détails et la désinstallation
 
 ### `merge-commit-to-branch`
 ```
-./scripts/merge-commit-to-branch ORBISBUG-123
+./scripts/merge-commit-to-branch.sh ORBISBUG-123
 ```
 > Trouve la/les branche liée au bug dans le repo `orme-prescription`, demande de choisir la version de destination, crée la nouvelle branche, merge le/les commit, propose d'ouvrir l'interface de résolution Intellij en cas de conflit et push
 ```
-./scripts/merge-commit-to-branch ORBISBUG-123 --repo
+./scripts/merge-commit-to-branch.sh ORBISBUG-123 --repo
 ```
 > N'utilise pas le repo `orme-prescription` mais propose de choisir dans la liste des repos disponibles dans le dossier /home/orbisu/work
 ---
