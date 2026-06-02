@@ -134,6 +134,24 @@ Voir [skills/SETUP.md](skills/SETUP.md) pour les détails et la désinstallation
 ```
 > Crée une branche, affiche la liste des dépendances existantes dans les package.json, permet d'en choisir une, met à jour la version de la lib choisie dans les package-lock.json de prescription-app et prescription-lib, crée le commit
 
+## Catalogue des scripts
+
+| Script                     | Commande                                               | Quand | Avantage                                                                   | Description                                                                                                                                                |
+|----------------------------|--------------------------------------------------------|---|----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Merge un defect dans une autre version dans un worktree distinct           | Merge les commits d'un defect/story dans une autre version. Repo utilisé: `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
+
+## Exemples d'utilisation
+
+### `merge-commit-to-branch`
+```
+./scripts/merge-commit-to-branch ORBISBUG-123
+```
+> Trouve la/les branche liée au bug dans le repo `orme-prescription`, demande de choisir la version de destination, crée la nouvelle branche, merge le/les commit, propose d'ouvrir l'interface de résolution Intellij en cas de conflit et push
+```
+./scripts/merge-commit-to-branch ORBISBUG-123 --repo
+```
+> N'utilise pas le repo `orme-prescription` mais propose de choisir dans la liste des repos disponibles dans le dossier /home/orbisu/work
+---
 
 ## Workflow
 
