@@ -113,57 +113,118 @@ print_step "Récupération des branches distantes..."
 git fetch --all --prune
 print_success "Fetch terminé."
 
-# ---- Recherche de la branche source liée au ticket --------------------------
+# ---- Recherche des commits sur les branches /develop (priorité) -------------
 
-print_step "Recherche des branches liées à ${TICKET}..."
+print_step "Recherche des commits liés à ${TICKET} sur les branches /develop..."
 
-SOURCE_BRANCHES=()
-
-# Branches locales finissant par /<TICKET>
-while IFS= read -r branch; do
-    branch=$(echo "$branch" | sed 's/^\*\s*//' | tr -d ' ')
-    [ -n "$branch" ] && SOURCE_BRANCHES+=("$branch")
-done < <(git branch --list | grep -E "/${TICKET}(-[^/]*)?$")
-
-# Branches distantes finissant par /<TICKET> (strip origin/, dédoublonnage)
+ALL_DEVELOP_BRANCHES=()
 while IFS= read -r line; do
     branch=$(echo "$line" | sed 's|^[[:space:]]*origin/||' | tr -d ' ')
-    already=false
-    for existing in "${SOURCE_BRANCHES[@]}"; do
-        [ "$existing" = "$branch" ] && already=true && break
-    done
-    [ "$already" = false ] && [ -n "$branch" ] && SOURCE_BRANCHES+=("$branch")
-done < <(git branch -r | grep -E "/${TICKET}(-[^/]*)?$" | grep -v 'HEAD')
+    ALL_DEVELOP_BRANCHES+=("$branch")
+done < <(git branch -r | grep -E '/develop$' | grep -v 'HEAD')
 
-if [ ${#SOURCE_BRANCHES[@]} -eq 0 ]; then
-    print_error "Aucune branche trouvée pour le ticket ${TICKET}."
-    print_error "Une branche doit exister avec un nom finissant par /${TICKET}"
-    print_error "Exemple : 400XXXX/presc/bugfix/${TICKET}"
-    exit 1
-fi
+# Tableaux parallèles : noms de branches ayant des commits + leurs hashes
+DEVELOP_WITH_COMMITS=()
+DEVELOP_COMMITS_DATA=()
 
-if [ ${#SOURCE_BRANCHES[@]} -eq 1 ]; then
-    CURRENT_BRANCH="${SOURCE_BRANCHES[0]}"
-    print_info "Branche source trouvée : ${BOLD}${CURRENT_BRANCH}${NC}"
+for dev_branch in "${ALL_DEVELOP_BRANCHES[@]}"; do
+    if git show-ref --verify --quiet "refs/heads/${dev_branch}"; then
+        ref="$dev_branch"
+    else
+        ref="origin/${dev_branch}"
+    fi
+    found_hashes=()
+    while IFS= read -r h; do
+        [ -n "$h" ] && found_hashes+=("$h")
+    done < <(git log --format="%H" --fixed-strings --regexp-ignore-case --grep="$TICKET" "$ref")
+    if [ ${#found_hashes[@]} -gt 0 ]; then
+        DEVELOP_WITH_COMMITS+=("$dev_branch")
+        DEVELOP_COMMITS_DATA+=("${found_hashes[*]}")
+    fi
+done
+
+SOURCE_IS_DEVELOP=false
+ALL_FOUND_HASHES=()
+CURRENT_BRANCH=""
+
+if [ ${#DEVELOP_WITH_COMMITS[@]} -gt 0 ]; then
+    # ---- Commits trouvés sur une ou plusieurs branches /develop ---------------
+    SOURCE_IS_DEVELOP=true
+
+    if [ ${#DEVELOP_WITH_COMMITS[@]} -eq 1 ]; then
+        CURRENT_BRANCH="${DEVELOP_WITH_COMMITS[0]}"
+        read -ra ALL_FOUND_HASHES <<< "${DEVELOP_COMMITS_DATA[0]}"
+        print_success "Commits trouvés sur la branche /develop : ${BOLD}${CURRENT_BRANCH}${NC}"
+    else
+        echo ""
+        echo -e "${YELLOW}${BOLD}Commits liés à ${TICKET} trouvés sur plusieurs branches /develop :${NC}"
+        for i in "${!DEVELOP_WITH_COMMITS[@]}"; do
+            nb=$(echo "${DEVELOP_COMMITS_DATA[$i]}" | wc -w)
+            echo -e "  ${CYAN}$((i+1)).${NC} ${DEVELOP_WITH_COMMITS[$i]}  ${CYAN}(${nb} commit(s))${NC}"
+        done
+        echo ""
+        read -rp "Choisissez la branche source (1-${#DEVELOP_WITH_COMMITS[@]}) : " SRC_CHOICE
+        if ! [[ "$SRC_CHOICE" =~ ^[0-9]+$ ]] || [ "$SRC_CHOICE" -lt 1 ] || [ "$SRC_CHOICE" -gt "${#DEVELOP_WITH_COMMITS[@]}" ]; then
+            print_error "Choix invalide : ${SRC_CHOICE}"
+            exit 1
+        fi
+        CURRENT_BRANCH="${DEVELOP_WITH_COMMITS[$((SRC_CHOICE-1))]}"
+        read -ra ALL_FOUND_HASHES <<< "${DEVELOP_COMMITS_DATA[$((SRC_CHOICE-1))]}"
+    fi
+
 else
-    echo ""
-    echo -e "${YELLOW}${BOLD}Plusieurs branches trouvées pour ${TICKET} :${NC}"
-    for i in "${!SOURCE_BRANCHES[@]}"; do
-        echo -e "  ${CYAN}$((i+1)).${NC} ${SOURCE_BRANCHES[$i]}"
-    done
-    echo ""
-    read -rp "Choisissez la branche source (1-${#SOURCE_BRANCHES[@]}) : " SRC_CHOICE
-    if ! [[ "$SRC_CHOICE" =~ ^[0-9]+$ ]] || [ "$SRC_CHOICE" -lt 1 ] || [ "$SRC_CHOICE" -gt "${#SOURCE_BRANCHES[@]}" ]; then
-        print_error "Choix invalide : ${SRC_CHOICE}"
+    # ---- Fallback : recherche d'une branche source liée au ticket -------------
+    print_warning "Aucun commit lié à ${TICKET} trouvé sur les branches /develop."
+    print_step "Recherche des branches liées à ${TICKET}..."
+
+    SOURCE_BRANCHES=()
+
+    # Branches locales finissant par /<TICKET>
+    while IFS= read -r branch; do
+        branch=$(echo "$branch" | sed 's/^\*\s*//' | tr -d ' ')
+        [ -n "$branch" ] && SOURCE_BRANCHES+=("$branch")
+    done < <(git branch --list | grep -E "/${TICKET}(-[^/]*)?$")
+
+    # Branches distantes finissant par /<TICKET> (strip origin/, dédoublonnage)
+    while IFS= read -r line; do
+        branch=$(echo "$line" | sed 's|^[[:space:]]*origin/||' | tr -d ' ')
+        already=false
+        for existing in "${SOURCE_BRANCHES[@]}"; do
+            [ "$existing" = "$branch" ] && already=true && break
+        done
+        [ "$already" = false ] && [ -n "$branch" ] && SOURCE_BRANCHES+=("$branch")
+    done < <(git branch -r | grep -E "/${TICKET}(-[^/]*)?$" | grep -v 'HEAD')
+
+    if [ ${#SOURCE_BRANCHES[@]} -eq 0 ]; then
+        print_error "Aucune branche trouvée pour le ticket ${TICKET}."
+        print_error "Une branche doit exister avec un nom finissant par /${TICKET}"
+        print_error "Exemple : 400XXXX/presc/bugfix/${TICKET}"
         exit 1
     fi
-    CURRENT_BRANCH="${SOURCE_BRANCHES[$((SRC_CHOICE-1))]}"
-fi
 
-if [[ "$CURRENT_BRANCH" != */* ]]; then
-    print_error "La branche '${CURRENT_BRANCH}' ne respecte pas la convention attendue."
-    print_error "Format attendu : <version>/<type>/... (ex: 400XXXX/presc/bugfix/${TICKET})"
-    exit 1
+    if [ ${#SOURCE_BRANCHES[@]} -eq 1 ]; then
+        CURRENT_BRANCH="${SOURCE_BRANCHES[0]}"
+        print_info "Branche source trouvée : ${BOLD}${CURRENT_BRANCH}${NC}"
+    else
+        echo ""
+        echo -e "${YELLOW}${BOLD}Plusieurs branches trouvées pour ${TICKET} :${NC}"
+        for i in "${!SOURCE_BRANCHES[@]}"; do
+            echo -e "  ${CYAN}$((i+1)).${NC} ${SOURCE_BRANCHES[$i]}"
+        done
+        echo ""
+        read -rp "Choisissez la branche source (1-${#SOURCE_BRANCHES[@]}) : " SRC_CHOICE
+        if ! [[ "$SRC_CHOICE" =~ ^[0-9]+$ ]] || [ "$SRC_CHOICE" -lt 1 ] || [ "$SRC_CHOICE" -gt "${#SOURCE_BRANCHES[@]}" ]; then
+            print_error "Choix invalide : ${SRC_CHOICE}"
+            exit 1
+        fi
+        CURRENT_BRANCH="${SOURCE_BRANCHES[$((SRC_CHOICE-1))]}"
+    fi
+
+    if [[ "$CURRENT_BRANCH" != */* ]]; then
+        print_error "La branche '${CURRENT_BRANCH}' ne respecte pas la convention attendue."
+        print_error "Format attendu : <version>/<type>/... (ex: 400XXXX/presc/bugfix/${TICKET})"
+        exit 1
+    fi
 fi
 
 # Résoudre la référence git à utiliser pour git log (locale si dispo, sinon distante)
@@ -173,13 +234,13 @@ else
     LOG_REF="origin/${CURRENT_BRANCH}"
 fi
 
-print_title "Cherry-pick vers une autre branche /develop"
-print_info "Dépôt              : ${BOLD}${SELECTED_REPO}${NC}"
-print_info "Branche source     : ${BOLD}${CURRENT_BRANCH}${NC}"
-
 # Préfixe de version = tout ce qui est avant le premier '/'
 # Ex : "400XXXX/presc/bugfix/ORBISBUG-123" -> "400XXXX"
 CURRENT_PREFIX=$(echo "$CURRENT_BRANCH" | cut -d'/' -f1)
+
+print_title "Cherry-pick vers une autre branche /develop"
+print_info "Dépôt              : ${BOLD}${SELECTED_REPO}${NC}"
+print_info "Branche source     : ${BOLD}${CURRENT_BRANCH}${NC}"
 print_info "Préfixe de version : ${BOLD}${CURRENT_PREFIX}${NC}"
 print_info "Ticket             : ${BOLD}${TICKET}${NC}"
 
@@ -230,27 +291,37 @@ print_info "Préfixe cible              : ${BOLD}${TARGET_PREFIX}${NC}"
 
 # ---- Construction du nom de la nouvelle branche -----------------------------
 
-# On remplace uniquement le préfixe de version
-# Ex : "400XXXX/presc/bugfix/ORBISBUG-123" -> "main/presc/bugfix/ORBISBUG-123"
-BRANCH_SUFFIX=$(echo "$CURRENT_BRANCH" | cut -d'/' -f2-)
-NEW_BRANCH="${TARGET_PREFIX}/${BRANCH_SUFFIX}"
+# Détermine le type de branche selon le préfixe du ticket :
+#   ORBISBUG-* ou HDEFECT-* -> presc/bugfix/<TICKET>
+#   HORME-*                 -> presc/feature/<TICKET>
+if [[ "$TICKET" =~ ^(ORBISBUG|HDEFECT)- ]]; then
+    TICKET_PATH="presc/bugfix/${TICKET}"
+elif [[ "$TICKET" =~ ^HORME- ]]; then
+    TICKET_PATH="presc/feature/${TICKET}"
+else
+    TICKET_PATH="presc/bugfix/${TICKET}"
+    print_warning "Préfixe de ticket non reconnu, type de branche par défaut : bugfix"
+fi
 
+NEW_BRANCH="${TARGET_PREFIX}/${TICKET_PATH}"
 print_info "Nouvelle branche à créer   : ${BOLD}${NEW_BRANCH}${NC}"
 
 # ---- Recherche des commits à cherry-picker ----------------------------------
 
-echo ""
-print_step "Recherche des commits relatifs au ticket ${TICKET}..."
+if [ "$SOURCE_IS_DEVELOP" = false ]; then
+    echo ""
+    print_step "Recherche des commits relatifs au ticket ${TICKET}..."
 
-ALL_FOUND_HASHES=()
-while IFS= read -r commit_hash; do
-    [ -n "$commit_hash" ] && ALL_FOUND_HASHES+=("$commit_hash")
-done < <(git log --format="%H" --fixed-strings --regexp-ignore-case --grep="$TICKET" "$LOG_REF")
+    ALL_FOUND_HASHES=()
+    while IFS= read -r commit_hash; do
+        [ -n "$commit_hash" ] && ALL_FOUND_HASHES+=("$commit_hash")
+    done < <(git log --format="%H" --fixed-strings --regexp-ignore-case --grep="$TICKET" "$LOG_REF")
 
-if [ ${#ALL_FOUND_HASHES[@]} -eq 0 ]; then
-    print_error "Aucun commit mentionnant '${TICKET}' trouvé sur la branche ${CURRENT_BRANCH}."
-    print_error "Vérifiez que le message de commit contient bien le numéro de ticket."
-    exit 1
+    if [ ${#ALL_FOUND_HASHES[@]} -eq 0 ]; then
+        print_error "Aucun commit mentionnant '${TICKET}' trouvé sur la branche ${CURRENT_BRANCH}."
+        print_error "Vérifiez que le message de commit contient bien le numéro de ticket."
+        exit 1
+    fi
 fi
 
 # Affichage de la liste détaillée avec date et auteur
