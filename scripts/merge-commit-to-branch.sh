@@ -128,11 +128,9 @@ DEVELOP_WITH_COMMITS=()
 DEVELOP_COMMITS_DATA=()
 
 for dev_branch in "${ALL_DEVELOP_BRANCHES[@]}"; do
-    if git show-ref --verify --quiet "refs/heads/${dev_branch}"; then
-        ref="$dev_branch"
-    else
-        ref="origin/${dev_branch}"
-    fi
+    # Toujours utiliser le ref distant (à jour après git fetch) pour la recherche,
+    # afin d'éviter qu'une branche locale en retard masque des commits récents.
+    ref="origin/${dev_branch}"
     found_hashes=()
     while IFS= read -r h; do
         [ -n "$h" ] && found_hashes+=("$h")
@@ -227,12 +225,8 @@ else
     fi
 fi
 
-# Résoudre la référence git à utiliser pour git log (locale si dispo, sinon distante)
-if git show-ref --verify --quiet "refs/heads/${CURRENT_BRANCH}"; then
-    LOG_REF="$CURRENT_BRANCH"
-else
-    LOG_REF="origin/${CURRENT_BRANCH}"
-fi
+# Toujours utiliser le ref distant (à jour après git fetch) pour git log
+LOG_REF="origin/${CURRENT_BRANCH}"
 
 # Préfixe de version = tout ce qui est avant le premier '/'
 # Ex : "400XXXX/presc/bugfix/ORBISBUG-123" -> "400XXXX"
