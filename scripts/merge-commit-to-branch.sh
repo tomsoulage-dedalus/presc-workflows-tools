@@ -11,6 +11,10 @@
 #   TICKET_ID  ID du bug ou de la story (ex: ORBISBUG-123, HORME-123)
 #   --repo     (optionnel) Affiche la liste des dépôts disponibles pour en choisir un.
 #              Sans ce flag, le dépôt orme-prescription est utilisé par défaut.
+#
+# Prequisites :
+#   Create a classic access token with repo rights on Github + authorize dedalus-cis4u in Configure SSO
+#   Store it in your .bashrc in GITHUB_TOKEN
 # =============================================================================
 
 set -e
@@ -332,8 +336,8 @@ if [ "$SOURCE_IS_DEVELOP" = false ]; then
     done
     echo ""
     print_warning "Ces commits proviennent d'une branche ticket et non d'une branche /develop."
-    read -rp "Confirmer l'utilisation de ces commits pour le cherry-pick ? (y/N) : " CONFIRM_TICKET_BRANCH
-    if [[ ! "$CONFIRM_TICKET_BRANCH" =~ ^[Yy]$ ]]; then
+    read -rp "Confirmer l'utilisation de ces commits pour le cherry-pick ? (Y/n) : " CONFIRM_TICKET_BRANCH
+    if [[ "$CONFIRM_TICKET_BRANCH" =~ ^[Nn]$ ]]; then
         echo "Annulé."
         exit 0
     fi
@@ -414,9 +418,9 @@ echo -e "  5. Push final"
 echo -e "  6. Suppression du worktree temporaire"
 echo -e "${GREEN}  ✓ Votre branche courante ${BOLD}${CURRENT_BRANCH}${GREEN} ne sera pas modifiée.${NC}"
 echo ""
-read -rp "Confirmer ? (y/N) : " CONFIRM
+read -rp "Confirmer ? (Y/n) : " CONFIRM
 
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
     echo "Annulé."
     exit 0
 fi
@@ -510,9 +514,9 @@ for ((i=${#COMMITS_TO_PICK[@]}-1; i>=0; i--)); do
         if [ -n "$DETECTED_TOOL" ]; then
             echo ""
             print_info "Outil de fusion détecté : ${BOLD}${DETECTED_TOOL_NAME}${NC}"
-            read -rp "Ouvrir ${DETECTED_TOOL_NAME} pour résoudre les conflits visuellement ? (y/N) : " USE_VISUAL
+            read -rp "Ouvrir ${DETECTED_TOOL_NAME} pour résoudre les conflits visuellement ? (Y/n) : " USE_VISUAL
 
-            if [[ "$USE_VISUAL" =~ ^[Yy]$ ]]; then
+            if [[ ! "$USE_VISUAL" =~ ^[Nn]$ ]]; then
                 case "$DETECTED_TOOL" in
                     idea|idea.sh)
                         MERGETOOL_CMD="${DETECTED_TOOL} merge \"\$LOCAL\" \"\$REMOTE\" \"\$BASE\" \"\$MERGED\""
@@ -532,8 +536,8 @@ for ((i=${#COMMITS_TO_PICK[@]}-1; i>=0; i--)); do
                     mergetool --no-prompt
 
                 echo ""
-                read -rp "Conflits résolus ? Continuer le cherry-pick ? (y/N) : " CONTINUE_CHERRY
-                if [[ "$CONTINUE_CHERRY" =~ ^[Yy]$ ]]; then
+                read -rp "Conflits résolus ? Continuer le cherry-pick ? (Y/n) : " CONTINUE_CHERRY
+                if [[ ! "$CONTINUE_CHERRY" =~ ^[Nn]$ ]]; then
                     git cherry-pick --continue --no-edit
                     RESOLVED=true
                 fi
@@ -570,4 +574,194 @@ print_title "Terminé avec succès !"
 print_success "Branche créée et poussée : ${BOLD}${NEW_BRANCH}${NC}"
 print_info   "${#COMMITS_TO_PICK[@]} commit(s) cherry-pickés depuis ${BOLD}${CURRENT_BRANCH}${NC}"
 
+# ---- Création optionnelle de la PR GitHub ------------------------------------
 
+echo ""
+read -rp "Créer une Pull Request GitHub pour cette branche ? (Y/n) : " CREATE_PR
+
+if [[ ! "$CREATE_PR" =~ ^[Nn]$ ]]; then
+
+    # Chargement des variables d'environnement
+    # shellcheck source=/dev/null
+    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+
+    # Résolution du token GitHub :
+    #   1. $GITHUB_TOKEN (déjà dans l'environnement)
+    #   2. gh auth token (si gh CLI est installé et authentifié)
+    if [ -z "$GITHUB_TOKEN" ] && command -v gh &>/dev/null; then
+        GITHUB_TOKEN=$(gh auth token 2>/dev/null || true)
+    fi
+    if [ -z "$GITHUB_TOKEN" ]; then
+        print_error "Aucun token GitHub trouvé."
+        print_error "Option 1 (recommandée) : installer gh CLI et lancer 'gh auth login'"
+        print_error "Option 2              : export GITHUB_TOKEN=<votre-PAT> dans ~/.bashrc"
+        print_error "                        (token à créer sur https://github.com/settings/tokens, scope: repo)"
+        exit 1
+    fi
+    if [ -z "$JIRA_DOMAIN" ]; then
+        print_warning "Variable JIRA_DOMAIN non définie, le lien Jira sera omis dans le body."
+        print_warning "Ajoutez-la dans ~/.bashrc : export JIRA_DOMAIN=jira.dedalus.com"
+    fi
+
+    # Extraction du owner/repo depuis l'URL du remote origin
+    REMOTE_URL=$(git -C "$SELECTED_REPO_PATH" remote get-url origin 2>/dev/null)
+    if [[ "$REMOTE_URL" =~ git@github\.com:(.+/.+)\.git$ ]]; then
+        GH_REPO="${BASH_REMATCH[1]}"
+    elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)\.git$ ]]; then
+        GH_REPO="${BASH_REMATCH[1]}"
+    elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)$ ]]; then
+        GH_REPO="${BASH_REMATCH[1]}"
+    else
+        print_error "Impossible d'extraire owner/repo depuis l'URL remote : ${REMOTE_URL}"
+        print_error "Format attendu : git@github.com:owner/repo.git ou https://github.com/owner/repo.git"
+        exit 1
+    fi
+    GH_API="https://api.github.com/repos/${GH_REPO}"
+    print_info "Dépôt GitHub : ${BOLD}${GH_REPO}${NC}"
+
+    # Détermination du préfixe de commit selon le type de ticket
+    if [[ "$TICKET" == HORME-* ]]; then
+        COMMIT_PREFIX="feat"
+    elif [[ "$TICKET" =~ ^(ORBISBUG|HDEFECT)- ]]; then
+        COMMIT_PREFIX="fix"
+    else
+        COMMIT_PREFIX="fix"
+        print_warning "Préfixe de ticket non reconnu, commit prefix par défaut : fix"
+    fi
+
+    # Construction du titre à partir du message du commit principal
+    # On prend le commit le plus ancien (dernier dans le tableau, ordre newest-first)
+    MAIN_COMMIT="${COMMITS_TO_PICK[${#COMMITS_TO_PICK[@]}-1]}"
+    COMMIT_MSG=$(git log -1 --format="%s" "$MAIN_COMMIT")
+
+    # Supprime le préfixe conventionnel éventuel déjà présent (ex: "fix(TICKET): ")
+    COMMIT_MSG_CLEAN=$(echo "$COMMIT_MSG" | sed -E 's/^[a-z]+\([^)]+\):[[:space:]]*//')
+
+    # Troncature à 60 caractères sans couper un mot
+    if [ ${#COMMIT_MSG_CLEAN} -gt 60 ]; then
+        COMMIT_MSG_CLEAN=$(echo "$COMMIT_MSG_CLEAN" | awk '{
+            s = ""; n = 0
+            for (i=1; i<=NF; i++) {
+                if (n + length($i) + (n>0?1:0) > 60) break
+                s = s (n>0?" ":"") $i
+                n += length($i) + (n>0?1:0)
+            }
+            print s
+        }')
+    fi
+
+    PR_TITLE="${COMMIT_PREFIX}(${TICKET}): ${COMMIT_MSG_CLEAN}"
+    print_info "Titre de la PR : ${BOLD}${PR_TITLE}${NC}"
+
+    # Génération du body de la PR
+    COMMITS_LIST=""
+    for commit in "${COMMITS_TO_PICK[@]}"; do
+        commit_msg=$(git log -1 --format="%s" "$commit")
+        COMMITS_LIST="${COMMITS_LIST}- \`${commit}\` — ${commit_msg}"$'\n'
+    done
+
+    # Lien Jira optionnel selon que JIRA_DOMAIN est défini
+    if [ -n "$JIRA_DOMAIN" ]; then
+        JIRA_LINK="[${TICKET}](https://${JIRA_DOMAIN}/browse/${TICKET})"
+    else
+        JIRA_LINK="${TICKET}"
+    fi
+
+    PR_BODY="## Jira Ticket
+
+${JIRA_LINK}
+
+## Description
+
+Cherry-pick du ticket **${TICKET}** depuis \`${CURRENT_BRANCH}\` vers \`${TARGET_DEVELOP}\`.
+
+## Commits portés
+
+${COMMITS_LIST}
+## Changes
+
+<!-- Décrivez ici les fichiers modifiés et les changements effectués -->
+
+## Tests
+
+<!-- Résultats des tests -->
+"
+
+    # Détermination de la base : TARGET_DEVELOP, fallback sur main
+    PR_BASE="$TARGET_DEVELOP"
+    if ! git ls-remote --exit-code --heads origin "$PR_BASE" > /dev/null 2>&1; then
+        print_warning "La branche '${PR_BASE}' n'existe pas sur le remote, fallback sur 'main'."
+        PR_BASE="main"
+    fi
+
+    # Vérification si une PR existe déjà pour cette branche
+    print_step "Vérification si une PR existe déjà..."
+    GH_REPO_OWNER="${GH_REPO%%/*}"
+    EXISTING_PR=$(curl -s \
+        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "${GH_API}/pulls?state=open&head=${GH_REPO_OWNER}:${NEW_BRANCH}" \
+        | jq -r '.[0].html_url // ""' 2>/dev/null) || EXISTING_PR=""
+    if [ -n "$EXISTING_PR" ]; then
+        print_warning "Une PR existe déjà pour cette branche :"
+        print_info "  ${EXISTING_PR}"
+        exit 0
+    fi
+
+    for label_entry in "WORKFLOWS:3B02AA" "MERGE ↕️:D93F0B"; do
+        label_name="${label_entry%%:*}"
+        label_color="${label_entry##*:}"
+        curl -s -o /dev/null \
+            -X POST \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GH_API}/labels" \
+            -d "{\"name\":\"${label_name}\",\"color\":\"${label_color}\"}" || true
+    done
+
+    # Création de la PR via l'API GitHub REST
+    print_step "Création de la Pull Request..."
+    PR_PAYLOAD=$(jq -n \
+        --arg title "$PR_TITLE" \
+        --arg body  "$PR_BODY" \
+        --arg head  "$NEW_BRANCH" \
+        --arg base  "$PR_BASE" \
+        '{title: $title, body: $body, head: $head, base: $base}')
+
+    PR_RESPONSE=$(curl -s \
+        -X POST \
+        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "${GH_API}/pulls" \
+        -d "$PR_PAYLOAD")
+
+    PR_URL=$(echo "$PR_RESPONSE" | jq -r '.html_url // ""' 2>/dev/null) || PR_URL=""
+
+    PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // ""' 2>/dev/null) || PR_NUMBER=""
+
+    if [ -z "$PR_URL" ] || [ "$PR_URL" = "null" ]; then
+        PR_ERROR=$(echo "$PR_RESPONSE" | jq -r '.message // "Erreur inconnue"' 2>/dev/null) || PR_ERROR="Erreur inconnue"
+        print_error "Échec de la création de la PR : ${PR_ERROR}"
+        print_error "URL API : ${GH_API}/pulls"
+        print_error "Head    : ${NEW_BRANCH}"
+        print_error "Base    : ${PR_BASE}"
+        print_error "Réponse complète : ${PR_RESPONSE}"
+        exit 1
+    fi
+
+    # Ajout des labels sur la PR
+    curl -s -o /dev/null \
+        -X POST \
+        -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "${GH_API}/issues/${PR_NUMBER}/labels" \
+        -d '{"labels":["WORKFLOWS","MERGE \u2195\ufe0f"]}'
+
+    echo ""
+    print_title "Pull Request créée !"
+    echo -e "  🌿 ${BOLD}Branche  :${NC} ${NEW_BRANCH}"
+    echo -e "  🎯 ${BOLD}Base     :${NC} ${PR_BASE}"
+    echo -e "  🔗 ${BOLD}PR       :${NC} ${PR_URL}"
+    echo -e "  📋 ${BOLD}Titre    :${NC} ${PR_TITLE}"
+    echo -e "  🏷️  ${BOLD}Labels   :${NC} WORKFLOWS, MERGE ↕️"
+fi
