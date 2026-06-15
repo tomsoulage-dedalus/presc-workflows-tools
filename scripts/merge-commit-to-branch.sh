@@ -136,7 +136,7 @@ for dev_branch in "${ALL_DEVELOP_BRANCHES[@]}"; do
     found_hashes=()
     while IFS= read -r h; do
         [ -n "$h" ] && found_hashes+=("$h")
-    done < <(git log --format="%H" --fixed-strings --regexp-ignore-case --grep="$TICKET" "$ref")
+    done < <(git log --format="%H" --regexp-ignore-case --grep="$TICKET" "$ref")
     if [ ${#found_hashes[@]} -gt 0 ]; then
         DEVELOP_WITH_COMMITS+=("$dev_branch")
         DEVELOP_COMMITS_DATA+=("${found_hashes[*]}")
@@ -315,12 +315,33 @@ if [ "$SOURCE_IS_DEVELOP" = false ]; then
     ALL_FOUND_HASHES=()
     while IFS= read -r commit_hash; do
         [ -n "$commit_hash" ] && ALL_FOUND_HASHES+=("$commit_hash")
-    done < <(git log --format="%H" --fixed-strings --regexp-ignore-case --grep="$TICKET" "$LOG_REF")
+    done < <(git log --format="%H" --regexp-ignore-case --grep="$TICKET" "$LOG_REF")
 
     if [ ${#ALL_FOUND_HASHES[@]} -eq 0 ]; then
         print_error "Aucun commit mentionnant '${TICKET}' trouvé sur la branche ${CURRENT_BRANCH}."
         print_error "Vérifiez que le message de commit contient bien le numéro de ticket."
         exit 1
+    fi
+
+    # ---- Avertissement : commits trouvés sur une branche ticket, pas sur /develop ----
+    echo ""
+    print_warning "Aucun commit lié à ${TICKET} n'a été trouvé sur les branches /develop."
+    print_warning "Les commits suivants ont été trouvés sur la branche ticket : ${BOLD}${CURRENT_BRANCH}${NC}"
+    echo ""
+    printf "  %-10s %-20s %-30s %s\n" "Hash" "Date" "Auteur" "Message"
+    printf "  %-10s %-20s %-30s %s\n" "----------" "--------------------" "------------------------------" "-------"
+    for hash in "${ALL_FOUND_HASHES[@]}"; do
+        commit_date=$(git log -1 --format="%ci" "$hash" | cut -c1-16)
+        commit_author=$(git log -1 --format="%an" "$hash" | cut -c1-29)
+        commit_msg=$(git log -1 --format="%s" "$hash" | cut -c1-60)
+        printf "  ${YELLOW}%-10s${NC} %-20s %-30s %s\n" "$hash" "$commit_date" "$commit_author" "$commit_msg"
+    done
+    echo ""
+    print_warning "Ces commits proviennent d'une branche ticket et non d'une branche /develop."
+    read -rp "Confirmer l'utilisation de ces commits pour le cherry-pick ? (y/N) : " CONFIRM_TICKET_BRANCH
+    if [[ ! "$CONFIRM_TICKET_BRANCH" =~ ^[Yy]$ ]]; then
+        echo "Annulé."
+        exit 0
     fi
 fi
 
