@@ -106,17 +106,6 @@ Examples:
 EOF
 }
 
-load_config_file() {
-  local config_file="$1"
-  if [[ ! -f "$config_file" ]]; then
-    log_error "Config file not found: ${config_file}"
-    exit 1
-  fi
-
-  # shellcheck disable=SC1090
-  source "$config_file"
-}
-
 resolve_version_prefix() {
   local resolved_prefix=""
 
@@ -486,7 +475,13 @@ STEP_DURATIONS=()
 BUILD_STEP_INDEX=-1
 DEPLOY_STEP_INDEX=-1
 
-load_config_file "$CONFIG_FILE"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  log_error "Config file not found: ${CONFIG_FILE}"
+  exit 1
+fi
+
+# shellcheck disable=SC1090
+source "$CONFIG_FILE"
 
 BUILD_COMMAND_RAW="${BUILD_COMMAND:-}"
 DEFAULT_MAVEN_ARGS_RAW="${DEFAULT_MAVEN_ARGS:-}"
