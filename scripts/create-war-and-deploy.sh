@@ -62,6 +62,7 @@ Options:
   --verbose              Show full build output instead of the loading animation
   --version-line LINE    Version line to resolve from VERSION_PREFIXES (ex: 3.22, 4.0, 4.01)
   --version-prefix PREF  Explicit version prefix override (ex: 3.4000000.9999)
+  --packaging-branch BR  Explicit packaging repo branch override
   --build-only           Build the WAR without running any deploy script
   --replace-maven-args   Replace DEFAULT_MAVEN_ARGS instead of appending CLI mvn args
   --deploy TARGET        Select a deployment target from DEPLOY_COMMANDS
@@ -83,12 +84,12 @@ Configuration variables (set them in scripts/create-war-and-deploy.env):
   DEFAULT_DEPLOY_TARGET  Default key selected from the deployment catalog
   DEPLOY_COMMANDS        Bash associative array mapping targets to commands
   DEPLOY_ARGUMENTS       Bash associative array mapping targets to arguments
-  DEFAULT_VERSION_LINE   Default version line if --version-line is omitted
   VERSION_PREFIXES       Bash associative array mapping version lines to prefixes
+  PACKAGING_BRANCHES     Bash associative array mapping version lines to packaging branches
 
 CLI precedence:
-  --version-line / --version-prefix / --deploy / --deploy-script override the
-  equivalent values coming from create-war-and-deploy.env.
+  --version-line / --version-prefix / --packaging-branch / --deploy /
+  --deploy-script override the equivalent values coming from create-war-and-deploy.env.
   --deploy-arg appends an argument to the selected target's DEPLOY_ARGUMENTS.
   When --deploy-script is used, catalog arguments are ignored and only explicit
   --deploy-arg values are passed to the replacement script.
@@ -99,6 +100,7 @@ Examples:
   ./create-war-and-deploy.sh ORBISBUG-40966
   ./create-war-and-deploy.sh ORBISBUG-40966 --verbose
   ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.0 -DskipTests -Dspotbugs.skip=true
+  ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.01 --packaging-branch 40000XX/develop
   ./create-war-and-deploy.sh HORME-7167 --build-only --version-line 3.22 -DskipTests
   ./create-war-and-deploy.sh ORBISBUG-40966 --deploy quick
   ./create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -Ppresc-dev -DskipTests -pl deployment/orbis-medication-war -am
@@ -113,14 +115,9 @@ resolve_version_prefix() {
     return 0
   fi
 
-  if [[ -z "$VERSION_LINE" && -n "${DEFAULT_VERSION_LINE:-}" ]]; then
-    VERSION_LINE="$DEFAULT_VERSION_LINE"
-  fi
-
   if [[ -z "$VERSION_LINE" ]]; then
     log_error "No version prefix could be resolved."
     log_error "Pass --version-line <line> or --version-prefix <prefix>."
-    log_error "You can also configure DEFAULT_VERSION_LINE in create-war-and-deploy.env."
     exit 1
   fi
 
@@ -137,6 +134,124 @@ resolve_version_prefix() {
   fi
 
   VERSION_PREFIX="$resolved_prefix"
+}
+
+prompt_version_line() {
+  local choices=()
+  local index choice selected
+
+  if [[ -n "$VERSION_LINE" || -n "$VERSION_PREFIX" ]]; then
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    log_error "No version line selected and no interactive terminal is available."
+    log_error "Pass --version-line <line> or --version-prefix <prefix>."
+    exit 1
+  fi
+
+  if ! declare -p VERSION_PREFIXES >/dev/null 2>&1; then
+    log_error "VERSION_PREFIXES must be declared in create-war-and-deploy.env."
+    exit 1
+  fi
+
+  if sort -V </dev/null >/dev/null 2>&1; then
+    mapfile -t choices < <(printf "%s\n" "${!VERSION_PREFIXES[@]}" | sort -V)
+  else
+    mapfile -t choices < <(printf "%s\n" "${!VERSION_PREFIXES[@]}" | sort)
+  fi
+
+  if [[ ${#choices[@]} -eq 0 ]]; then
+    log_error "No version choices configured."
+    log_error "Set VERSION_PREFIXES in create-war-and-deploy.env or pass --version-line."
+    exit 1
+  fi
+
+  log_title "Choose version line"
+  for index in "${!choices[@]}"; do
+    choice="${choices[$index]}"
+    printf "  %s) %s\n" "$((index + 1))" "$choice" >&2
+  done
+
+  while true; do
+    printf "Version line [1-%s]: " "${#choices[@]}" >&2
+    if ! IFS= read -r selected; then
+      log_error "No version selected."
+      exit 1
+    fi
+
+    if [[ "$selected" =~ ^[0-9]+$ && "$selected" -ge 1 && "$selected" -le ${#choices[@]} ]]; then
+      VERSION_LINE="${choices[$((selected - 1))]}"
+      return 0
+    fi
+
+    if [[ -n "${VERSION_PREFIXES["$selected"]:-}" ]]; then
+      VERSION_LINE="$selected"
+      return 0
+    fi
+
+    log_error "Invalid version choice: ${selected}"
+  done
+}
+
+resolve_packaging_branch() {
+  local resolved_branch=""
+
+  if [[ -n "$PACKAGING_BRANCH" ]]; then
+    return 0
+  fi
+
+  if [[ -z "$VERSION_LINE" ]]; then
+    return 0
+  fi
+
+  if declare -p PACKAGING_BRANCHES >/dev/null 2>&1; then
+    resolved_branch="${PACKAGING_BRANCHES["$VERSION_LINE"]:-}"
+  fi
+
+  PACKAGING_BRANCH="$resolved_branch"
+}
+
+checkout_packaging_branch() {
+  local target_branch="$1"
+  local current_branch status_output
+
+  if [[ -z "$target_branch" ]]; then
+    log "No packaging branch configured for version line ${VERSION_LINE}; keeping current branch."
+    return 0
+  fi
+
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log_error "Packaging repo is not a git worktree: ${REPO_DIR}"
+    return 1
+  fi
+
+  current_branch="$(git rev-parse --abbrev-ref HEAD)"
+  if [[ "$current_branch" == "$target_branch" ]]; then
+    log "Packaging repo already on branch: ${target_branch}"
+    return 0
+  fi
+
+  status_output="$(git status --porcelain)"
+  if [[ -n "$status_output" ]]; then
+    log_error "Packaging repo has local changes; refusing to switch branch: ${REPO_DIR}"
+    log_error "Commit, stash, or clean the packaging repo before running this script."
+    return 1
+  fi
+
+  if git show-ref --verify --quiet "refs/heads/${target_branch}"; then
+    git checkout "$target_branch"
+    return 0
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/origin/${target_branch}"; then
+    git checkout --track "origin/${target_branch}"
+    return 0
+  fi
+
+  log_error "Packaging branch not found locally or on origin: ${target_branch}"
+  log_error "Fetch ${REPO_DIR} or update PACKAGING_BRANCHES in create-war-and-deploy.env."
+  return 1
 }
 
 build_final_deploy_args() {
@@ -438,6 +553,7 @@ TICKET_ID=""
 VERSION_LINE=""
 VERSION_PREFIX=""
 VERSION=""
+PACKAGING_BRANCH="${PACKAGING_BRANCH:-}"
 LOG_MODE="${LOG_MODE:-normal}"
 CURRENT_STEP_LABEL="init"
 CURRENT_STEP_INDEX=-1
@@ -454,7 +570,7 @@ DEPLOY_ARGS=()
 CONFIGURED_DEFAULT_DEPLOY_ARGS=()
 CLI_DEPLOY_ARGS=()
 FINAL_DEPLOY_ARGS=()
-REPOS_DIR="$DEFAULT_REPOS_DIR"
+REPOS_DIR="${REPOS_DIR:-}"
 REPO_DIR=""
 BUILD_COMMAND_RAW=""
 DEPLOY_COMMAND_RAW=""
@@ -473,6 +589,7 @@ STEP_NAMES=()
 STEP_STATUSES=()
 STEP_DURATIONS=()
 BUILD_STEP_INDEX=-1
+CHECKOUT_STEP_INDEX=-1
 DEPLOY_STEP_INDEX=-1
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -566,6 +683,15 @@ while [[ $# -gt 0 ]]; do
       VERSION_PREFIX="$2"
       shift 2
       ;;
+    --packaging-branch)
+      if [[ $# -lt 2 ]]; then
+        log_error "Missing value for --packaging-branch"
+        usage
+        exit 1
+      fi
+      PACKAGING_BRANCH="$2"
+      shift 2
+      ;;
     --)
       shift
       while [[ $# -gt 0 ]]; do
@@ -645,7 +771,9 @@ else
   fi
 fi
 
+prompt_version_line
 resolve_version_prefix
+resolve_packaging_branch
 
 VERSION="${VERSION_PREFIX}-${TICKET_ID}-SNAPSHOT"
 REPO_DIR="${PACKAGING_REPO:-}"
@@ -657,10 +785,6 @@ if [[ -z "$BUILD_COMMAND_RAW" || ${#BUILD_COMMAND_PARTS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-BUILD_STEP_NAME="$(format_command "${BUILD_COMMAND_PARTS[@]}")"
-add_step "$BUILD_STEP_NAME"
-BUILD_STEP_INDEX="$REPLY"
-
 if [[ -z "$REPO_DIR" ]]; then
   log_error "PACKAGING_REPO must be set in create-war-and-deploy.env."
   exit 1
@@ -671,6 +795,15 @@ if [[ ! -d "$REPO_DIR" ]]; then
   log_error "Set PACKAGING_REPO in create-war-and-deploy.env."
   exit 1
 fi
+
+if [[ -n "$PACKAGING_BRANCH" ]]; then
+  add_step "checkout packaging branch ${PACKAGING_BRANCH}"
+  CHECKOUT_STEP_INDEX="$REPLY"
+fi
+
+BUILD_STEP_NAME="$(format_command "${BUILD_COMMAND_PARTS[@]}")"
+add_step "$BUILD_STEP_NAME"
+BUILD_STEP_INDEX="$REPLY"
 
 if [[ $BUILD_ONLY -eq 1 ]]; then
   add_step "deploy command" "SKIPPED"
@@ -777,6 +910,11 @@ log_dim "==============================================="
 log_title "createWarAndDeploy"
 log "Config: ${CONFIG_FILE}"
 log "Build workdir: ${REPO_DIR}"
+if [[ -n "$PACKAGING_BRANCH" ]]; then
+  log "Packaging branch: ${PACKAGING_BRANCH}"
+else
+  log "Packaging branch: current branch"
+fi
 log "Ticket ID: ${TICKET_ID}"
 if [[ -n "$VERSION_LINE" ]]; then
   log "Version line: ${VERSION_LINE}"
@@ -820,6 +958,10 @@ else
   fi
 fi
 log_dim "==============================================="
+
+if [[ $CHECKOUT_STEP_INDEX -ge 0 ]]; then
+  run_tracked_step "$CHECKOUT_STEP_INDEX" "$REPO_DIR" "switching packaging repo to ${PACKAGING_BRANCH}" checkout_packaging_branch "$PACKAGING_BRANCH"
+fi
 
 MAVEN_CMD=("${BUILD_COMMAND_PARTS[@]}" -Dversion.orme-prescription="${VERSION}")
 if [[ ${#FINAL_MAVEN_ARGS[@]} -gt 0 ]]; then
