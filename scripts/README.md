@@ -8,15 +8,17 @@
 ## Exemples d'utilisation
 
 ### `create-war-and-deploy`
-> Le script lit une seule config : `scripts/create-war-and-deploy.env`. Cette config porte les chemins et commandes de build/deploy (`PACKAGING_REPO`, `BUILD_COMMAND`, `DEPLOY_WORKDIR`, `DEPLOY_COMMANDS`). Les options CLI priment sur cette config. Les arguments Maven passés en fin de commande **s'ajoutent** à `DEFAULT_MAVEN_ARGS` ; utilise `--replace-maven-args` si tu veux repartir d'une base vide.
+> Le script lit une seule config : `scripts/create-war-and-deploy.env`. Cette config porte les chemins et commandes de build/deploy (`PACKAGING_REPO`, `PACKAGING_WORKTREE_BASE`, `BUILD_COMMAND`, `DEPLOY_WORKDIR`, `DEPLOY_COMMANDS`). Les options CLI priment sur cette config. Les arguments Maven passés en fin de commande **s'ajoutent** à `DEFAULT_MAVEN_ARGS` ; utilise `--replace-maven-args` si tu veux repartir d'une base vide.
 
 Le flux par défaut :
 
-1. Accepte un ticket `ORBISBUG-<numéro>` ou `HORME-<numéro>`.
-2. Résout la version snapshot correspondant au ticket et à `DEFAULT_VERSION_LINE`.
-3. Lance Maven avec `-U` pour vérifier sur Nexus la dernière version des snapshots.
-4. Construit `orbis-medication.war`.
-5. Lance la cible de déploiement `quick`, soit `bash ./wsl/quick.sh deploy {war}`.
+1. Accepte un ticket `ORBISBUG-<numéro>` ou `HORME-<numéro>`, ainsi que les variantes avec espace ou suffixe comme `ORBISBUG 12345_2`.
+2. Demande la ligne de version dans le shell si `--version-line` ou `--version-prefix` n'est pas fourni.
+3. Résout la version snapshot correspondant au ticket et à la ligne de version choisie.
+4. Prépare une worktree temporaire de `orme-medication-packaging` sur la branche configurée pour cette version.
+5. Lance Maven avec `-U` pour vérifier sur Nexus la dernière version des snapshots.
+6. Construit `orbis-medication.war`.
+7. Lance la cible de déploiement `quick`, soit `bash ./wsl/quick.sh deploy {war}`.
 
 Le placeholder `{war}` est remplacé par le chemin du WAR qui vient d'être construit.
 
@@ -29,8 +31,10 @@ Le placeholder `{war}` est remplacé par le chemin du WAR qui vient d'être cons
 | Variable | Rôle |
 |---|---|
 | `REPOS_DIR` | Racine commune des repos locaux |
-| `PACKAGING_REPO` | Répertoire dans lequel le build ORME packaging est exécuté |
-| `WAR_RELATIVE_PATH` | Chemin du WAR produit à partir de `PACKAGING_REPO` |
+| `PACKAGING_REPO` | Repo source `orme-medication-packaging` utilisé pour créer les worktrees de build |
+| `PACKAGING_WORKTREE_BASE` | Répertoire parent des worktrees temporaires de build |
+| `PACKAGING_WORKTREE_FETCH` | `1` pour fetch `origin` avant de préparer la worktree, `0` sinon |
+| `WAR_RELATIVE_PATH` | Chemin du WAR produit à partir du répertoire de build |
 | `MAVEN_LOCAL_REPOSITORY` | Repo Maven local utilisé pour afficher les artefacts résolus |
 | `BUILD_COMMAND` | Commande de build de base |
 | `DEFAULT_MAVEN_ARGS` | Args Maven ajoutés au build sauf avec `--replace-maven-args` |
@@ -38,17 +42,21 @@ Le placeholder `{war}` est remplacé par le chemin du WAR qui vient d'être cons
 | `DEFAULT_DEPLOY_TARGET` | Clé de déploiement sélectionnée par défaut |
 | `DEPLOY_COMMANDS` | Tableau associatif `clé -> commande` |
 | `DEPLOY_ARGUMENTS` | Tableau associatif `clé -> arguments`, avec placeholders `{war}`, `{ticket}`, `{version}` |
-| `DEFAULT_VERSION_LINE` | Ligne de version utilisée si `--version-line` n'est pas fournie |
 | `VERSION_PREFIXES` | Tableau associatif Bash `ligne -> préfixe` pour calculer la version snapshot |
+| `PACKAGING_BRANCHES` | Tableau associatif Bash `ligne -> branche packaging` pour sélectionner la worktree de build |
 
 Les versions supportées se déclarent directement dans le fichier `.env` :
 
 ```bash
-DEFAULT_VERSION_LINE="4.0"
 declare -A VERSION_PREFIXES=(
   ["3.22"]="3.3220000.9999"
   ["4.0"]="3.4000000.9999"
   ["4.01"]="3.4000100.9999"
+)
+
+declare -A PACKAGING_BRANCHES=(
+  ["4.0"]="400XXXX/develop"
+  ["4.01"]="40000XX/develop"
 )
 ```
 
@@ -75,6 +83,7 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 | `--verbose` | Affiche toute la sortie du build Maven au lieu du spinner |
 | `--version-line <ligne>` | Sélectionne une entrée de `VERSION_PREFIXES` |
 | `--version-prefix <préfixe>` | Utilise directement un préfixe sans passer par `VERSION_PREFIXES` |
+| `--packaging-branch <branche>` | Utilise ponctuellement une branche packaging différente de `PACKAGING_BRANCHES` |
 | `--build-only` | Construit la WAR sans lancer de déploiement |
 | `--replace-maven-args` | Remplace `DEFAULT_MAVEN_ARGS` par les arguments Maven fournis |
 | `--deploy <clé>` | Sélectionne une entrée du catalogue de déploiement |
@@ -91,12 +100,13 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 5. `--deploy-arg` ajoute un argument à ceux de l'entrée sélectionnée.
 6. `--deploy-script` ignore le catalogue et utilise uniquement les `--deploy-arg` explicitement fournis.
 7. Le script calcule toujours lui-même `-Dversion.orme-prescription=<prefix-ticket-SNAPSHOT>`.
-8. `Ctrl+C` arrête la commande en cours, affiche le résumé et retourne le code `130`.
+8. Si une branche packaging est configurée, le build se fait dans une worktree temporaire créée depuis `origin/<branche>`, puis supprimée à la fin.
+9. `Ctrl+C` arrête la commande en cours, affiche le résumé et retourne le code `130`.
 
 ```
 ./scripts/create-war-and-deploy.sh ORBISBUG-40966
 ```
-> Utilise la config par défaut du fichier `scripts/create-war-and-deploy.env` : ligne de version par défaut, build Maven ciblé sur `deployment/orbis-medication-war`, puis déploiement avec `quick.sh deploy`. En mode normal, le build affiche une animation de chargement concise et le déploiement reste interactif.
+> Utilise la config du fichier `scripts/create-war-and-deploy.env` : demande la ligne de version dans le shell, prépare une worktree packaging temporaire, build Maven ciblé sur `deployment/orbis-medication-war`, puis déploiement avec `quick.sh deploy`. En mode normal, le build affiche une animation de chargement concise et le déploiement reste interactif.
 ```
 ./scripts/create-war-and-deploy.sh ORBISBUG-40966 --verbose
 ```

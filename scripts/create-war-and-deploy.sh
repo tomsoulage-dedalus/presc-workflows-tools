@@ -75,8 +75,10 @@ Configuration files:
 
 Configuration variables (set them in scripts/create-war-and-deploy.env):
   REPOS_DIR              Base directory containing sibling repos
-  PACKAGING_REPO         Packaging repository path
-  WAR_RELATIVE_PATH      WAR path relative to PACKAGING_REPO
+  PACKAGING_REPO         Packaging source repository path
+  PACKAGING_WORKTREE_BASE Base directory used for packaging build worktrees
+  PACKAGING_WORKTREE_FETCH Fetch origin before preparing the packaging worktree (1/0)
+  WAR_RELATIVE_PATH      WAR path relative to the packaging build workdir
   MAVEN_LOCAL_REPOSITORY Local Maven repository used for artifact observability
   BUILD_COMMAND          Space-separated build command
   DEFAULT_MAVEN_ARGS     Space-separated Maven args appended unless replaced
@@ -212,46 +214,54 @@ resolve_packaging_branch() {
   PACKAGING_BRANCH="$resolved_branch"
 }
 
-checkout_packaging_branch() {
+sanitize_worktree_name() {
+  local value="$1"
+  value="${value//\//__}"
+  value="${value//[^A-Za-z0-9._-]/_}"
+  printf "%s\n" "$value"
+}
+
+prepare_packaging_worktree() {
   local target_branch="$1"
-  local current_branch status_output
+  local worktree_dir="$2"
+  local source_repo="$3"
+  local remote_ref="origin/${target_branch}"
+  local parent_dir
 
   if [[ -z "$target_branch" ]]; then
     log "No packaging branch configured for version line ${VERSION_LINE}; keeping current branch."
     return 0
   fi
 
-  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    log_error "Packaging repo is not a git worktree: ${REPO_DIR}"
+  if ! git -C "$source_repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log_error "Packaging source repo is not a git worktree: ${source_repo}"
     return 1
   fi
 
-  current_branch="$(git rev-parse --abbrev-ref HEAD)"
-  if [[ "$current_branch" == "$target_branch" ]]; then
-    log "Packaging repo already on branch: ${target_branch}"
-    return 0
+  if [[ "${PACKAGING_WORKTREE_FETCH:-1}" == "1" ]]; then
+    log "Fetching latest packaging branch from origin: ${target_branch}"
+    if ! git -C "$source_repo" fetch origin "$target_branch"; then
+      log_error "Unable to fetch packaging branch from origin: ${target_branch}"
+      return 1
+    fi
   fi
 
-  status_output="$(git status --porcelain)"
-  if [[ -n "$status_output" ]]; then
-    log_error "Packaging repo has local changes; refusing to switch branch: ${REPO_DIR}"
-    log_error "Commit, stash, or clean the packaging repo before running this script."
+  if ! git -C "$source_repo" show-ref --verify --quiet "refs/remotes/${remote_ref}"; then
+    log_error "Packaging remote branch not found: ${remote_ref}"
+    log_error "Fetch ${source_repo} or update PACKAGING_BRANCHES in create-war-and-deploy.env."
     return 1
   fi
 
-  if git show-ref --verify --quiet "refs/heads/${target_branch}"; then
-    git checkout "$target_branch"
-    return 0
+  parent_dir="$(dirname "$worktree_dir")"
+  mkdir -p "$parent_dir"
+
+  if [[ -e "$worktree_dir" ]]; then
+    log_error "Temporary packaging worktree path already exists: ${worktree_dir}"
+    return 1
   fi
 
-  if git show-ref --verify --quiet "refs/remotes/origin/${target_branch}"; then
-    git checkout --track "origin/${target_branch}"
-    return 0
-  fi
-
-  log_error "Packaging branch not found locally or on origin: ${target_branch}"
-  log_error "Fetch ${REPO_DIR} or update PACKAGING_BRANCHES in create-war-and-deploy.env."
-  return 1
+  log "Creating packaging worktree: ${worktree_dir}"
+  git -C "$source_repo" worktree add --detach "$worktree_dir" "$remote_ref"
 }
 
 build_final_deploy_args() {
@@ -295,6 +305,19 @@ find_first_war_entry() {
   local pattern="$2"
 
   jar tf "$war_path" | grep -m1 -E "$pattern" || true
+}
+
+normalize_ticket_id() {
+  local raw="$1"
+  raw="${raw^^}"
+  raw="${raw//[[:space:]]/-}"
+
+  if [[ "$raw" =~ ^(ORBISBUG|HORME)[-_]([0-9]+([_-][A-Z0-9]+)*)$ ]]; then
+    printf "%s-%s\n" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    return 0
+  fi
+
+  return 1
 }
 
 log_prescription_artifact_observability() {
@@ -548,7 +571,6 @@ run_tracked_step() {
   log_ok "Step $((step_index + 1))/${total_steps} done in ${STEP_DURATIONS[$step_index]}"
 }
 
-TICKET_PATTERN='^(ORBISBUG|HORME)-[0-9]+$'
 TICKET_ID=""
 VERSION_LINE=""
 VERSION_PREFIX=""
@@ -571,6 +593,11 @@ CONFIGURED_DEFAULT_DEPLOY_ARGS=()
 CLI_DEPLOY_ARGS=()
 FINAL_DEPLOY_ARGS=()
 REPOS_DIR="${REPOS_DIR:-}"
+PACKAGING_SOURCE_REPO=""
+PACKAGING_WORKTREE_BASE="${PACKAGING_WORKTREE_BASE:-}"
+PACKAGING_WORKTREE_DIR=""
+PACKAGING_WORKTREE_CREATED=0
+PACKAGING_WORKTREE_FETCH="${PACKAGING_WORKTREE_FETCH:-1}"
 REPO_DIR=""
 BUILD_COMMAND_RAW=""
 DEPLOY_COMMAND_RAW=""
@@ -589,7 +616,7 @@ STEP_NAMES=()
 STEP_STATUSES=()
 STEP_DURATIONS=()
 BUILD_STEP_INDEX=-1
-CHECKOUT_STEP_INDEX=-1
+PACKAGING_WORKTREE_STEP_INDEX=-1
 DEPLOY_STEP_INDEX=-1
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -700,19 +727,21 @@ while [[ $# -gt 0 ]]; do
       done
       ;;
     *)
-      if [[ -z "$TICKET_ID" && "${1^^}" =~ $TICKET_PATTERN ]]; then
-        TICKET_ID="${1^^}"
+      if [[ -z "$TICKET_ID" ]] && TICKET_ID="$(normalize_ticket_id "$1")"; then
+        shift
+      elif [[ -z "$TICKET_ID" && $# -ge 2 ]] && TICKET_ID="$(normalize_ticket_id "$1-$2")"; then
+        shift 2
       else
         CLI_MAVEN_ARGS+=("$1")
+        shift
       fi
-      shift
       ;;
   esac
 done
 
 if [[ -z "$TICKET_ID" ]]; then
   log_error "Missing or unsupported ticket ID."
-  log_error "Expected ORBISBUG-<number> or HORME-<number>."
+  log_error "Expected ORBISBUG-<number>, HORME-<number>, or variants like 'ORBISBUG 12345_2'."
   usage
   exit 1
 fi
@@ -776,8 +805,8 @@ resolve_version_prefix
 resolve_packaging_branch
 
 VERSION="${VERSION_PREFIX}-${TICKET_ID}-SNAPSHOT"
-REPO_DIR="${PACKAGING_REPO:-}"
-WAR_PATH="${WAR_PATH:-${REPO_DIR}/${WAR_RELATIVE_PATH}}"
+PACKAGING_SOURCE_REPO="${PACKAGING_REPO:-}"
+REPO_DIR="$PACKAGING_SOURCE_REPO"
 
 if [[ -z "$BUILD_COMMAND_RAW" || ${#BUILD_COMMAND_PARTS[@]} -eq 0 ]]; then
   log_error "No build command configured."
@@ -785,21 +814,28 @@ if [[ -z "$BUILD_COMMAND_RAW" || ${#BUILD_COMMAND_PARTS[@]} -eq 0 ]]; then
   exit 1
 fi
 
-if [[ -z "$REPO_DIR" ]]; then
+if [[ -z "$PACKAGING_SOURCE_REPO" ]]; then
   log_error "PACKAGING_REPO must be set in create-war-and-deploy.env."
   exit 1
 fi
 
-if [[ ! -d "$REPO_DIR" ]]; then
-  log_error "Packaging repo not found: ${REPO_DIR}"
+if [[ ! -d "$PACKAGING_SOURCE_REPO" ]]; then
+  log_error "Packaging source repo not found: ${PACKAGING_SOURCE_REPO}"
   log_error "Set PACKAGING_REPO in create-war-and-deploy.env."
   exit 1
 fi
 
 if [[ -n "$PACKAGING_BRANCH" ]]; then
-  add_step "checkout packaging branch ${PACKAGING_BRANCH}"
-  CHECKOUT_STEP_INDEX="$REPLY"
+  if [[ -z "$PACKAGING_WORKTREE_BASE" ]]; then
+    PACKAGING_WORKTREE_BASE="${REPOS_DIR}/.worktrees"
+  fi
+  PACKAGING_WORKTREE_DIR="${PACKAGING_WORKTREE_BASE}/orme-medication-packaging/$(sanitize_worktree_name "$PACKAGING_BRANCH")/$(sanitize_worktree_name "$TICKET_ID")-$$"
+  REPO_DIR="$PACKAGING_WORKTREE_DIR"
+  add_step "prepare packaging worktree ${PACKAGING_BRANCH}"
+  PACKAGING_WORKTREE_STEP_INDEX="$REPLY"
 fi
+
+WAR_PATH="${WAR_PATH:-${REPO_DIR}/${WAR_RELATIVE_PATH}}"
 
 BUILD_STEP_NAME="$(format_command "${BUILD_COMMAND_PARTS[@]}")"
 add_step "$BUILD_STEP_NAME"
@@ -894,6 +930,11 @@ on_exit() {
   fi
   log "Total duration: $(format_seconds "$total_secs")"
   log_dim "==============================================="
+  if [[ $PACKAGING_WORKTREE_CREATED -eq 1 && -n "$PACKAGING_WORKTREE_DIR" && -d "$PACKAGING_WORKTREE_DIR" ]]; then
+    log_info "Cleaning packaging worktree: ${PACKAGING_WORKTREE_DIR}"
+    git -C "$PACKAGING_SOURCE_REPO" worktree remove --force "$PACKAGING_WORKTREE_DIR" >/dev/null 2>&1 || log_warn "Unable to remove packaging worktree: ${PACKAGING_WORKTREE_DIR}"
+    git -C "$PACKAGING_SOURCE_REPO" worktree prune >/dev/null 2>&1 || true
+  fi
   if [[ ${#STEP_LOG_FILES[@]} -gt 0 ]]; then
     rm -f "${STEP_LOG_FILES[@]}"
   fi
@@ -909,9 +950,12 @@ INIT_DONE=1
 log_dim "==============================================="
 log_title "createWarAndDeploy"
 log "Config: ${CONFIG_FILE}"
+log "Packaging source repo: ${PACKAGING_SOURCE_REPO}"
 log "Build workdir: ${REPO_DIR}"
 if [[ -n "$PACKAGING_BRANCH" ]]; then
   log "Packaging branch: ${PACKAGING_BRANCH}"
+  log "Packaging worktree: ${PACKAGING_WORKTREE_DIR}"
+  log "Packaging fetch origin: ${PACKAGING_WORKTREE_FETCH}"
 else
   log "Packaging branch: current branch"
 fi
@@ -959,8 +1003,9 @@ else
 fi
 log_dim "==============================================="
 
-if [[ $CHECKOUT_STEP_INDEX -ge 0 ]]; then
-  run_tracked_step "$CHECKOUT_STEP_INDEX" "$REPO_DIR" "switching packaging repo to ${PACKAGING_BRANCH}" checkout_packaging_branch "$PACKAGING_BRANCH"
+if [[ $PACKAGING_WORKTREE_STEP_INDEX -ge 0 ]]; then
+  run_tracked_step "$PACKAGING_WORKTREE_STEP_INDEX" "$PACKAGING_SOURCE_REPO" "preparing packaging worktree for ${PACKAGING_BRANCH}" prepare_packaging_worktree "$PACKAGING_BRANCH" "$PACKAGING_WORKTREE_DIR" "$PACKAGING_SOURCE_REPO"
+  PACKAGING_WORKTREE_CREATED=1
 fi
 
 MAVEN_CMD=("${BUILD_COMMAND_PARTS[@]}" -Dversion.orme-prescription="${VERSION}")
