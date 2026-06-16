@@ -55,8 +55,8 @@ declare -A VERSION_PREFIXES=(
 )
 
 declare -A PACKAGING_BRANCHES=(
-  ["4.0"]="400XXXX/develop"
-  ["4.01"]="40000XX/develop"
+  ["4.0"]="40000XX/develop"
+  ["4.01"]="400XXXX/develop"
 )
 ```
 
@@ -112,15 +112,15 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 ```
 > Désactive l'animation du build et affiche sa sortie complète. La sortie du déploiement est toujours visible.
 ```
-./scripts/create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.0 -DskipTests -Dspotbugs.skip=true
+./scripts/create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.0
 ```
-> Charge la config depuis `scripts/create-war-and-deploy.env`, résout le prefix `4.0 -> 3.4000000.9999`, puis **ajoute** ces args Maven à ceux de `DEFAULT_MAVEN_ARGS` avant de construire `orbis-medication.war`.
+> Charge la config depuis `scripts/create-war-and-deploy.env`, résout le prefix `4.0 -> 3.4000000.9999`, puis construit `orbis-medication.war` avec les args Maven par défaut.
 ```
-./scripts/create-war-and-deploy.sh HORME-7167 --version-line 3.22 --build-only -DskipTests
+./scripts/create-war-and-deploy.sh HORME-7167 --version-line 3.22 --build-only
 ```
 > Construit uniquement la WAR avec la ligne de version `3.22`, sans lancer le déploiement.
 ```
-./scripts/create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -Ppresc-dev -DskipTests -pl deployment/orbis-medication-war -am
+./scripts/create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -U -Ppresc-dev
 ```
 > Ignore `DEFAULT_MAVEN_ARGS` et n'utilise que les args Maven passés sur la ligne de commande.
 ---

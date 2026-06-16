@@ -101,11 +101,11 @@ CLI precedence:
 Examples:
   ./create-war-and-deploy.sh ORBISBUG-40966
   ./create-war-and-deploy.sh ORBISBUG-40966 --verbose
-  ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.0 -DskipTests -Dspotbugs.skip=true
-  ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.01 --packaging-branch 40000XX/develop
-  ./create-war-and-deploy.sh HORME-7167 --build-only --version-line 3.22 -DskipTests
+  ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.0
+  ./create-war-and-deploy.sh ORBISBUG-40966 --version-line 4.01 --packaging-branch 400XXXX/develop
+  ./create-war-and-deploy.sh HORME-7167 --build-only --version-line 3.22
   ./create-war-and-deploy.sh ORBISBUG-40966 --deploy quick
-  ./create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -Ppresc-dev -DskipTests -pl deployment/orbis-medication-war -am
+  ./create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -U -Ppresc-dev
   ./create-war-and-deploy.sh ORBISBUG-7167 --deploy-script /path/to/quick.sh --deploy-arg deploy --deploy-arg '{war}'
 EOF
 }
@@ -214,11 +214,28 @@ resolve_packaging_branch() {
   PACKAGING_BRANCH="$resolved_branch"
 }
 
-sanitize_worktree_name() {
+sanitize_path_part() {
   local value="$1"
-  value="${value//\//__}"
   value="${value//[^A-Za-z0-9._-]/_}"
   printf "%s\n" "$value"
+}
+
+build_packaging_worktree_dir() {
+  local branch="$1"
+  local ticket="$2"
+  local branch_dir=""
+  local branch_part
+
+  IFS='/' read -r -a branch_parts <<< "$branch"
+  for branch_part in "${branch_parts[@]}"; do
+    if [[ -z "$branch_dir" ]]; then
+      branch_dir="$(sanitize_path_part "$branch_part")"
+    else
+      branch_dir="${branch_dir}/$(sanitize_path_part "$branch_part")"
+    fi
+  done
+
+  printf "%s/orme-medication-packaging/%s/%s\n" "$PACKAGING_WORKTREE_BASE" "$branch_dir" "$(sanitize_path_part "$ticket")"
 }
 
 prepare_packaging_worktree() {
@@ -256,8 +273,13 @@ prepare_packaging_worktree() {
   mkdir -p "$parent_dir"
 
   if [[ -e "$worktree_dir" ]]; then
-    log_error "Temporary packaging worktree path already exists: ${worktree_dir}"
-    return 1
+    log "Removing previous temporary packaging worktree: ${worktree_dir}"
+    if ! git -C "$source_repo" worktree remove --force "$worktree_dir" >/dev/null 2>&1; then
+      log_error "Unable to remove previous temporary packaging worktree: ${worktree_dir}"
+      log_error "Remove it manually or change PACKAGING_WORKTREE_BASE."
+      return 1
+    fi
+    git -C "$source_repo" worktree prune >/dev/null 2>&1 || true
   fi
 
   log "Creating packaging worktree: ${worktree_dir}"
@@ -829,7 +851,7 @@ if [[ -n "$PACKAGING_BRANCH" ]]; then
   if [[ -z "$PACKAGING_WORKTREE_BASE" ]]; then
     PACKAGING_WORKTREE_BASE="${REPOS_DIR}/.worktrees"
   fi
-  PACKAGING_WORKTREE_DIR="${PACKAGING_WORKTREE_BASE}/orme-medication-packaging/$(sanitize_worktree_name "$PACKAGING_BRANCH")/$(sanitize_worktree_name "$TICKET_ID")-$$"
+  PACKAGING_WORKTREE_DIR="$(build_packaging_worktree_dir "$PACKAGING_BRANCH" "$TICKET_ID")"
   REPO_DIR="$PACKAGING_WORKTREE_DIR"
   add_step "prepare packaging worktree ${PACKAGING_BRANCH}"
   PACKAGING_WORKTREE_STEP_INDEX="$REPLY"
