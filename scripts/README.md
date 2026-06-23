@@ -130,7 +130,7 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 ```
 ./scripts/merge-commit-to-branch.sh ORBISBUG-123
 ```
-> Trouve la/les branche liée au bug dans le repo `orme-prescription`, demande de choisir la version de destination, crée la nouvelle branche, merge le/les commit, propose d'ouvrir l'interface de résolution Intellij en cas de conflit et push
+> Trouve la/les branche liée au bug dans le repo `orme-prescription`, demande de choisir une ou plusieurs versions de destination (numéros séparés par des virgules, ou `all`), crée la nouvelle branche pour chacune, merge le/les commit, propose d'ouvrir l'interface de résolution Intellij en cas de conflit et push
 ```
 ./scripts/merge-commit-to-branch.sh ORBISBUG-123 --repo
 ```

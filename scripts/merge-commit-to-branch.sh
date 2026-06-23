@@ -3,7 +3,7 @@
 # =============================================================================
 # merge-commit-to-branch.sh
 #
-# Script pour porter les commits d'un ticket vers une autre branche /develop.
+# Script pour porter les commits d'un ticket vers une ou plusieurs branches /develop.
 #
 # Usage : ./merge-commit-to-branch.sh <TICKET_ID> [--repo]
 #
@@ -273,25 +273,50 @@ for i in "${!DEVELOP_BRANCHES[@]}"; do
 done
 
 echo ""
-read -rp "Choisissez la branche cible (1-${#DEVELOP_BRANCHES[@]}) : " CHOICE
+echo -e "  ${CYAN}•${NC} Entrez un ou plusieurs numéros séparés par des virgules  ex: ${BOLD}1,3${NC}"
+echo -e "  ${CYAN}•${NC} Ou tapez ${BOLD}all${NC} pour les porter sur toutes les branches"
+echo ""
+read -rp "Choisissez la/les branche(s) cible(s) (1-${#DEVELOP_BRANCHES[@]}) : " TARGET_SELECTION
 
-if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] || [ "$CHOICE" -lt 1 ] || [ "$CHOICE" -gt "${#DEVELOP_BRANCHES[@]}" ]; then
-    print_error "Choix invalide : ${CHOICE}"
+TARGET_DEVELOPS=()
+if [[ "$TARGET_SELECTION" =~ ^[Aa][Ll][Ll]$ ]]; then
+    TARGET_DEVELOPS=("${DEVELOP_BRANCHES[@]}")
+else
+    IFS=',' read -ra TARGET_NUMS <<< "$TARGET_SELECTION"
+    for num in "${TARGET_NUMS[@]}"; do
+        num=$(echo "$num" | tr -d '[:space:]')
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 1 ] || [ "$num" -gt "${#DEVELOP_BRANCHES[@]}" ]; then
+            print_error "Numéro invalide : ${num}"
+            exit 1
+        fi
+        candidate="${DEVELOP_BRANCHES[$((num-1))]}"
+        # Évite les doublons si un même numéro est saisi plusieurs fois
+        already=false
+        for existing in "${TARGET_DEVELOPS[@]}"; do
+            [ "$existing" = "$candidate" ] && already=true && break
+        done
+        [ "$already" = false ] && TARGET_DEVELOPS+=("$candidate")
+    done
+fi
+
+if [ ${#TARGET_DEVELOPS[@]} -eq 0 ]; then
+    print_error "Aucune branche cible sélectionnée."
     exit 1
 fi
 
-TARGET_DEVELOP="${DEVELOP_BRANCHES[$((CHOICE-1))]}"
-TARGET_PREFIX=$(echo "$TARGET_DEVELOP" | cut -d'/' -f1)
-
 echo ""
-print_info "Branche cible sélectionnée : ${BOLD}${TARGET_DEVELOP}${NC}"
-print_info "Préfixe cible              : ${BOLD}${TARGET_PREFIX}${NC}"
+print_info "Branche(s) cible(s) sélectionnée(s) (${#TARGET_DEVELOPS[@]}) :"
+for t in "${TARGET_DEVELOPS[@]}"; do
+    print_info "  ${BOLD}${t}${NC}"
+done
 
 # ---- Construction du nom de la nouvelle branche -----------------------------
 
 # Détermine le type de branche selon le préfixe du ticket :
 #   ORBISBUG-* ou HDEFECT-* -> presc/bugfix/<TICKET>
 #   HORME-*                 -> presc/feature/<TICKET>
+# Le préfixe de version (TARGET_PREFIX) et le nom final (NEW_BRANCH) sont
+# calculés par cible à l'intérieur de la boucle de traitement.
 if [[ "$TICKET" =~ ^(ORBISBUG|HDEFECT)- ]]; then
     TICKET_PATH="presc/bugfix/${TICKET}"
 elif [[ "$TICKET" =~ ^HORME- ]]; then
@@ -300,9 +325,6 @@ else
     TICKET_PATH="presc/bugfix/${TICKET}"
     print_warning "Préfixe de ticket non reconnu, type de branche par défaut : bugfix"
 fi
-
-NEW_BRANCH="${TARGET_PREFIX}/${TICKET_PATH}"
-print_info "Nouvelle branche à créer   : ${BOLD}${NEW_BRANCH}${NC}"
 
 # ---- Recherche des commits à cherry-picker ----------------------------------
 
@@ -410,12 +432,13 @@ fi
 
 echo ""
 echo -e "${YELLOW}${BOLD}Récapitulatif des actions :${NC}"
-echo -e "  1. Création d'un worktree temporaire sur ${BOLD}${TARGET_DEVELOP}${NC}"
-echo -e "  2. Création de la branche              ${BOLD}${NEW_BRANCH}${NC}"
-echo -e "  3. Push de la branche vide"
-echo -e "  4. Cherry-pick de ${#COMMITS_TO_PICK[@]} commit(s) liés à ${TICKET}"
-echo -e "  5. Push final"
-echo -e "  6. Suppression du worktree temporaire"
+echo -e "  Pour chacune des ${BOLD}${#TARGET_DEVELOPS[@]}${NC} branche(s) cible(s) :"
+for t in "${TARGET_DEVELOPS[@]}"; do
+    t_prefix=$(echo "$t" | cut -d'/' -f1)
+    echo -e "    ${CYAN}•${NC} ${BOLD}${t}${NC} → branche ${BOLD}${t_prefix}/${TICKET_PATH}${NC}"
+done
+echo -e "  Étapes par branche : worktree temporaire, création + push de la branche,"
+echo -e "                       cherry-pick de ${#COMMITS_TO_PICK[@]} commit(s), push final, nettoyage."
 echo -e "${GREEN}  ✓ Votre branche courante ${BOLD}${CURRENT_BRANCH}${GREEN} ne sera pas modifiée.${NC}"
 echo ""
 read -rp "Confirmer ? (Y/n) : " CONFIRM
@@ -425,7 +448,56 @@ if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
     exit 0
 fi
 
-# ---- Worktree temporaire -----------------------------------------------------
+# ---- Création de PR : choix global (une seule fois) -------------------------
+
+echo ""
+read -rp "Créer une Pull Request GitHub pour chaque branche créée ? (Y/n) : " CREATE_PR
+CREATE_PR_ENABLED=true
+[[ "$CREATE_PR" =~ ^[Nn]$ ]] && CREATE_PR_ENABLED=false
+
+# Résolution du token et du dépôt GitHub une seule fois si des PR sont demandées
+GITHUB_TOKEN_READY=false
+if [ "$CREATE_PR_ENABLED" = true ]; then
+    # Chargement des variables d'environnement
+    # shellcheck source=/dev/null
+    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+
+    # Résolution du token GitHub : $GITHUB_TOKEN puis 'gh auth token'
+    if [ -z "$GITHUB_TOKEN" ] && command -v gh &>/dev/null; then
+        GITHUB_TOKEN=$(gh auth token 2>/dev/null || true)
+    fi
+    if [ -z "$GITHUB_TOKEN" ]; then
+        print_warning "Aucun token GitHub trouvé : les Pull Requests ne seront pas créées."
+        print_warning "Option 1 (recommandée) : installer gh CLI et lancer 'gh auth login'"
+        print_warning "Option 2              : export GITHUB_TOKEN=<votre-PAT> dans ~/.bashrc"
+        CREATE_PR_ENABLED=false
+    else
+        if [ -z "$JIRA_DOMAIN" ]; then
+            print_warning "Variable JIRA_DOMAIN non définie, le lien Jira sera omis dans le body."
+        fi
+        # Extraction du owner/repo depuis l'URL du remote origin
+        REMOTE_URL=$(git -C "$SELECTED_REPO_PATH" remote get-url origin 2>/dev/null)
+        if [[ "$REMOTE_URL" =~ git@github\.com:(.+/.+)\.git$ ]]; then
+            GH_REPO="${BASH_REMATCH[1]}"
+        elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)\.git$ ]]; then
+            GH_REPO="${BASH_REMATCH[1]}"
+        elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)$ ]]; then
+            GH_REPO="${BASH_REMATCH[1]}"
+        else
+            print_warning "Impossible d'extraire owner/repo depuis l'URL remote : ${REMOTE_URL}"
+            print_warning "Les Pull Requests ne seront pas créées."
+            CREATE_PR_ENABLED=false
+        fi
+        if [ "$CREATE_PR_ENABLED" = true ]; then
+            GH_API="https://api.github.com/repos/${GH_REPO}"
+            GH_REPO_OWNER="${GH_REPO%%/*}"
+            GITHUB_TOKEN_READY=true
+            print_info "Dépôt GitHub : ${BOLD}${GH_REPO}${NC}"
+        fi
+    fi
+fi
+
+# ---- Worktree temporaire & traitement par branche cible ---------------------
 
 WORKTREE_DIR=""
 
@@ -439,39 +511,73 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-WORKTREE_DIR=$(mktemp -d --tmpdir "merge-commit-to-branch-XXXXXX")
+# Suivi des résultats par branche cible
+SUCCEEDED_TARGETS=()
+FAILED_TARGETS=()
+SKIPPED_TARGETS=()
+CREATED_PR_URLS=()
 
-print_step "Création d'un worktree temporaire sur ${TARGET_DEVELOP}..."
-git worktree add "$WORKTREE_DIR" "origin/${TARGET_DEVELOP}"
-print_success "Worktree prêt : ${WORKTREE_DIR}"
+for TARGET_DEVELOP in "${TARGET_DEVELOPS[@]}"; do
 
-cd "$WORKTREE_DIR"
+    cd "$SELECTED_REPO_PATH"
+
+    TARGET_PREFIX=$(echo "$TARGET_DEVELOP" | cut -d'/' -f1)
+    NEW_BRANCH="${TARGET_PREFIX}/${TICKET_PATH}"
+
+    print_title "Traitement de la cible : ${TARGET_DEVELOP}"
+    print_info "Nouvelle branche à créer : ${BOLD}${NEW_BRANCH}${NC}"
+
+    WORKTREE_DIR=$(mktemp -d --tmpdir "merge-commit-to-branch-XXXXXX")
+
+    print_step "Création d'un worktree temporaire sur ${TARGET_DEVELOP}..."
+    if ! git worktree add "$WORKTREE_DIR" "origin/${TARGET_DEVELOP}"; then
+        print_error "Échec de la création du worktree pour ${TARGET_DEVELOP}."
+        FAILED_TARGETS+=("$TARGET_DEVELOP")
+        cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
+    fi
+    print_success "Worktree prêt : ${WORKTREE_DIR}"
+
+    cd "$WORKTREE_DIR"
 
 # ---- Mise à jour de la branche /develop cible --------------------------------
 
 print_step "Mise à jour de ${TARGET_DEVELOP} (pull --rebase)..."
-git pull --rebase origin "$TARGET_DEVELOP"
+if ! git pull --rebase origin "$TARGET_DEVELOP"; then
+    print_error "Échec de la mise à jour de ${TARGET_DEVELOP}."
+    FAILED_TARGETS+=("$TARGET_DEVELOP")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
+fi
 print_success "${TARGET_DEVELOP} est à jour."
 
 # ---- Vérification que la nouvelle branche n'existe pas déjà -----------------
 
 if git show-ref --verify --quiet "refs/heads/${NEW_BRANCH}"; then
-    print_error "La branche '${NEW_BRANCH}' existe déjà en local. Veuillez la supprimer d'abord."
-    exit 1
+    print_error "La branche '${NEW_BRANCH}' existe déjà en local. Cible ignorée."
+    SKIPPED_TARGETS+=("$TARGET_DEVELOP (branche locale existante)")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
 fi
 
 if git ls-remote --exit-code --heads origin "$NEW_BRANCH" > /dev/null 2>&1; then
-    print_error "La branche '${NEW_BRANCH}' existe déjà sur le remote. Veuillez la supprimer d'abord."
-    exit 1
+    print_error "La branche '${NEW_BRANCH}' existe déjà sur le remote. Cible ignorée."
+    SKIPPED_TARGETS+=("$TARGET_DEVELOP (branche distante existante)")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
 fi
 
 # ---- Création et push de la nouvelle branche (vide) -------------------------
 
 print_step "Création de la branche ${NEW_BRANCH}..."
-git checkout -b "$NEW_BRANCH"
+if ! git checkout -b "$NEW_BRANCH"; then
+    print_error "Échec de la création de la branche ${NEW_BRANCH}."
+    FAILED_TARGETS+=("$TARGET_DEVELOP")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
+fi
 
 print_step "Push de la branche vide..."
-git push origin "$NEW_BRANCH"
+if ! git push origin "$NEW_BRANCH"; then
+    print_error "Échec du push de la branche ${NEW_BRANCH}."
+    FAILED_TARGETS+=("$TARGET_DEVELOP")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
+fi
 print_success "Branche ${NEW_BRANCH} poussée."
 
 # ---- Cherry-pick (du plus ancien au plus récent) ----------------------------
@@ -555,8 +661,10 @@ for ((i=${#COMMITS_TO_PICK[@]}-1; i>=0; i--)); do
             print_error "  git push origin ${NEW_BRANCH}"
             print_error "Puis supprimer le worktree :"
             print_error "  git -C ${SELECTED_REPO_PATH} worktree remove ${WORKTREE_DIR}"
-            WORKTREE_DIR=""  # Désactive le cleanup automatique
-            exit 1
+            FAILED_TARGETS+=("$TARGET_DEVELOP (conflit non résolu, worktree conservé : ${WORKTREE_DIR})")
+            WORKTREE_DIR=""  # Désactive le cleanup automatique (worktree conservé)
+            cd "$SELECTED_REPO_PATH"
+            continue 2
         fi
     fi
 
@@ -567,57 +675,25 @@ done
 
 echo ""
 print_step "Push final de ${NEW_BRANCH}..."
-git push origin "$NEW_BRANCH"
+if ! git push origin "$NEW_BRANCH"; then
+    print_error "Échec du push final de ${NEW_BRANCH}."
+    FAILED_TARGETS+=("$TARGET_DEVELOP")
+    cd "$SELECTED_REPO_PATH"; cleanup; WORKTREE_DIR=""; continue
+fi
 
 echo ""
-print_title "Terminé avec succès !"
 print_success "Branche créée et poussée : ${BOLD}${NEW_BRANCH}${NC}"
 print_info   "${#COMMITS_TO_PICK[@]} commit(s) cherry-pickés depuis ${BOLD}${CURRENT_BRANCH}${NC}"
+SUCCEEDED_TARGETS+=("$TARGET_DEVELOP")
+
+# Le worktree n'est plus nécessaire pour la création de la PR (API REST)
+cd "$SELECTED_REPO_PATH"
+cleanup
+WORKTREE_DIR=""
 
 # ---- Création optionnelle de la PR GitHub ------------------------------------
 
-echo ""
-read -rp "Créer une Pull Request GitHub pour cette branche ? (Y/n) : " CREATE_PR
-
-if [[ ! "$CREATE_PR" =~ ^[Nn]$ ]]; then
-
-    # Chargement des variables d'environnement
-    # shellcheck source=/dev/null
-    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
-
-    # Résolution du token GitHub :
-    #   1. $GITHUB_TOKEN (déjà dans l'environnement)
-    #   2. gh auth token (si gh CLI est installé et authentifié)
-    if [ -z "$GITHUB_TOKEN" ] && command -v gh &>/dev/null; then
-        GITHUB_TOKEN=$(gh auth token 2>/dev/null || true)
-    fi
-    if [ -z "$GITHUB_TOKEN" ]; then
-        print_error "Aucun token GitHub trouvé."
-        print_error "Option 1 (recommandée) : installer gh CLI et lancer 'gh auth login'"
-        print_error "Option 2              : export GITHUB_TOKEN=<votre-PAT> dans ~/.bashrc"
-        print_error "                        (token à créer sur https://github.com/settings/tokens, scope: repo)"
-        exit 1
-    fi
-    if [ -z "$JIRA_DOMAIN" ]; then
-        print_warning "Variable JIRA_DOMAIN non définie, le lien Jira sera omis dans le body."
-        print_warning "Ajoutez-la dans ~/.bashrc : export JIRA_DOMAIN=jira.dedalus.com"
-    fi
-
-    # Extraction du owner/repo depuis l'URL du remote origin
-    REMOTE_URL=$(git -C "$SELECTED_REPO_PATH" remote get-url origin 2>/dev/null)
-    if [[ "$REMOTE_URL" =~ git@github\.com:(.+/.+)\.git$ ]]; then
-        GH_REPO="${BASH_REMATCH[1]}"
-    elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)\.git$ ]]; then
-        GH_REPO="${BASH_REMATCH[1]}"
-    elif [[ "$REMOTE_URL" =~ https://github\.com/(.+/.+)$ ]]; then
-        GH_REPO="${BASH_REMATCH[1]}"
-    else
-        print_error "Impossible d'extraire owner/repo depuis l'URL remote : ${REMOTE_URL}"
-        print_error "Format attendu : git@github.com:owner/repo.git ou https://github.com/owner/repo.git"
-        exit 1
-    fi
-    GH_API="https://api.github.com/repos/${GH_REPO}"
-    print_info "Dépôt GitHub : ${BOLD}${GH_REPO}${NC}"
+if [ "$CREATE_PR_ENABLED" = true ] && [ "$GITHUB_TOKEN_READY" = true ]; then
 
     # Détermination du préfixe de commit selon le type de ticket
     if [[ "$TICKET" == HORME-* ]]; then
@@ -705,7 +781,8 @@ ${COMMITS_LIST}
     if [ -n "$EXISTING_PR" ]; then
         print_warning "Une PR existe déjà pour cette branche :"
         print_info "  ${EXISTING_PR}"
-        exit 0
+        CREATED_PR_URLS+=("${EXISTING_PR} (déjà existante)")
+        continue
     fi
 
     for label_entry in "WORKFLOWS:3B02AA" "MERGE ↕️:D93F0B"; do
@@ -746,7 +823,8 @@ ${COMMITS_LIST}
         print_error "Head    : ${NEW_BRANCH}"
         print_error "Base    : ${PR_BASE}"
         print_error "Réponse complète : ${PR_RESPONSE}"
-        exit 1
+        print_warning "La branche ${NEW_BRANCH} a bien été poussée, mais sans PR."
+        continue
     fi
 
     # Ajout des labels sur la PR
@@ -757,6 +835,7 @@ ${COMMITS_LIST}
         "${GH_API}/issues/${PR_NUMBER}/labels" \
         -d '{"labels":["WORKFLOWS","MERGE \u2195\ufe0f"]}'
 
+    CREATED_PR_URLS+=("$PR_URL")
     echo ""
     print_title "Pull Request créée !"
     echo -e "  🌿 ${BOLD}Branche  :${NC} ${NEW_BRANCH}"
@@ -764,4 +843,47 @@ ${COMMITS_LIST}
     echo -e "  🔗 ${BOLD}PR       :${NC} ${PR_URL}"
     echo -e "  📋 ${BOLD}Titre    :${NC} ${PR_TITLE}"
     echo -e "  🏷️  ${BOLD}Labels   :${NC} WORKFLOWS, MERGE ↕️"
+fi
+
+done
+
+# ---- Résumé final -----------------------------------------------------------
+
+echo ""
+print_title "Résumé du portage de ${TICKET}"
+
+if [ ${#SUCCEEDED_TARGETS[@]} -gt 0 ]; then
+    print_success "Branches portées avec succès (${#SUCCEEDED_TARGETS[@]}) :"
+    for t in "${SUCCEEDED_TARGETS[@]}"; do
+        echo -e "    ${GREEN}✓${NC} ${t}"
+    done
+fi
+
+if [ ${#SKIPPED_TARGETS[@]} -gt 0 ]; then
+    echo ""
+    print_warning "Branches ignorées (${#SKIPPED_TARGETS[@]}) :"
+    for t in "${SKIPPED_TARGETS[@]}"; do
+        echo -e "    ${YELLOW}•${NC} ${t}"
+    done
+fi
+
+if [ ${#FAILED_TARGETS[@]} -gt 0 ]; then
+    echo ""
+    print_error "Branches en échec (${#FAILED_TARGETS[@]}) :"
+    for t in "${FAILED_TARGETS[@]}"; do
+        echo -e "    ${RED}✗${NC} ${t}"
+    done
+fi
+
+if [ ${#CREATED_PR_URLS[@]} -gt 0 ]; then
+    echo ""
+    print_info "Pull Requests :"
+    for u in "${CREATED_PR_URLS[@]}"; do
+        echo -e "    🔗 ${u}"
+    done
+fi
+
+# Code de sortie : échec si au moins une cible a échoué
+if [ ${#FAILED_TARGETS[@]} -gt 0 ]; then
+    exit 1
 fi
