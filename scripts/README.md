@@ -4,6 +4,7 @@
 |----------------------------|--------------------------------------------------------|---|----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **create-war-and-deploy**  | `create-war-and-deploy <TICKET> [options] [mvn args]`  | n'importe quelle branche | Build + deploy ORME packagés avec mapping de version configurable          | Résout le bon snapshot Nexus via une ligne de version (`--version-line`), construit `orbis-medication.war`, puis lance le script de déploiement configuré |
 | **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Merge un defect dans une autre version dans un worktree distinct           | Merge les commits d'un defect/story dans une autre version. Repo utilisé: `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
+| **switch-branch-all-repos** | `switch-branch-all-repos`                             | n'importe quelle branche | Modifie la branche courante de tous les repos locaux en une seule commande | Modifie et met à jour la branche courante de tous les repos locaux                                                                                         |
 
 ## Exemples d'utilisation
 
@@ -134,4 +135,11 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 ./scripts/merge-commit-to-branch.sh ORBISBUG-123 --repo
 ```
 > N'utilise pas le repo `orme-prescription` mais propose de choisir dans la liste des repos disponibles dans le dossier /home/orbisu/work
+---
+
+### `switch-branch-all-repos`
+```
+./scripts/switch-branch-all-repos.sh
+```
+> Pour chaque repo local, propose de changer la branche courante en listant les branches dev existantes et de mettre à jour la branche
 ---
