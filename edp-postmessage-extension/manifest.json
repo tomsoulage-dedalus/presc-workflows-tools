@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "EDP PostMessage Debugger",
+  "version": "1.0.0",
+  "description": "Envoie les postMessage orme.* (add, delete, sign, save, cancel, stop) vers l'iframe/app EDP sans passer par la console.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
