@@ -75,6 +75,23 @@
     .row button {
       margin-top: 8px;
     }
+    .field-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .field-row button.now {
+      width: auto;
+      flex: 0 0 auto;
+      margin-top: 2px;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: #37474f;
+      color: #eee;
+    }
+    .field-row button.now:hover {
+      background: #455a64;
+    }
     #status {
       font-size: 11px;
       margin-top: 8px;
@@ -99,7 +116,10 @@
       <option value="PROTOCOL">PROTOCOL</option>
     </select>
     <label>Date (optionnel, ISO)</label>
-    <input type="text" id="addDate" placeholder="null si vide" />
+    <div class="field-row">
+      <input type="text" id="addDate" placeholder="null si vide" />
+      <button type="button" class="now" data-now-target="addDate" title="Remplir avec la date/heure actuelle">Now</button>
+    </div>
     <button id="btnAdd">orme.drug.add</button>
   </section>
 
@@ -118,7 +138,10 @@
   <section>
     <h2>Stop lines</h2>
     <label>Stop date (ISO)</label>
-    <input type="text" id="stopDate" placeholder="2026-05-05T14:30:00" />
+    <div class="field-row">
+      <input type="text" id="stopDate" placeholder="2026-05-05T14:30:00" />
+      <button type="button" class="now" data-now-target="stopDate" title="Remplir avec la date/heure actuelle">Now</button>
+    </div>
     <label>Prescription line IDs (séparés par virgule)</label>
     <input type="text" id="stopLineIds" placeholder="128982,128983" />
     <button id="btnStop">orme.prescription_line.stop</button>

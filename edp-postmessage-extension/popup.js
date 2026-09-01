@@ -57,6 +57,24 @@ function parseOptionalDate(value) {
   return value.trim();
 }
 
+function localIsoNow() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return (
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+    `T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  );
+}
+
+for (const button of document.querySelectorAll("button[data-now-target]")) {
+  button.addEventListener("click", () => {
+    const target = document.getElementById(button.dataset.nowTarget);
+    target.value = localIsoNow();
+    // Réutilise le listener de cache branché sur l'input.
+    target.dispatchEvent(new Event("input"));
+  });
+}
+
 document.getElementById("btnAdd").addEventListener("click", () => {
   const productId = parseOptionalNumber(document.getElementById("addProductId").value);
   const type = document.getElementById("addType").value;
@@ -115,3 +133,66 @@ document.getElementById("btnSave").addEventListener("click", () => {
 document.getElementById("btnCancel").addEventListener("click", () => {
   handleAction("orme.cancel", undefined);
 });
+
+// ===================================================================================================
+//                          Cache des champs (par onglet, durée de session)
+// ===================================================================================================
+
+const CACHED_FIELD_IDS = [
+  "addProductId",
+  "addType",
+  "addDate",
+  "deleteProductId",
+  "deleteType",
+  "stopDate",
+  "stopLineIds"
+];
+
+async function getCacheKey() {
+  const tabId = await getActiveTabId();
+  return `form:${tabId}`;
+}
+
+async function saveFields() {
+  const values = {};
+  for (const id of CACHED_FIELD_IDS) {
+    values[id] = document.getElementById(id).value;
+  }
+  const key = await getCacheKey();
+  await chrome.storage.session.set({ [key]: values });
+}
+
+async function restoreFields() {
+  const key = await getCacheKey();
+  const stored = await chrome.storage.session.get(key);
+  const values = stored[key];
+  if (!values) {
+    return;
+  }
+  for (const id of CACHED_FIELD_IDS) {
+    if (typeof values[id] === "string") {
+      document.getElementById(id).value = values[id];
+    }
+  }
+}
+
+for (const fieldId of CACHED_FIELD_IDS) {
+  const fieldEl = document.getElementById(fieldId);
+  const persist = () => {
+    saveFields().catch(() => {
+      // cache best-effort : une erreur ne doit pas bloquer l'usage du popup
+    });
+  };
+  fieldEl.addEventListener("input", persist);
+  fieldEl.addEventListener("change", persist);
+}
+
+restoreFields().catch(() => {
+  // pas de cache exploitable : les champs restent vides
+});
+
+// Le cache d'un onglet fermé n'a plus de raison d'être.
+chrome.tabs.onRemoved.addListener((tabId) => {
+  chrome.storage.session.remove(`form:${tabId}`);
+});
+
