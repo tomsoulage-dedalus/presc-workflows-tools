@@ -403,9 +403,14 @@ else
     fi
     print_success "Branche poussée : ${NEW_BRANCH}"
 
-    # Chargement des variables d'environnement
+    # Chargement des variables d'environnement (désactivation temporaire de
+    # set -eu : .bashrc / /etc/bashrc référencent des variables non définies)
     # shellcheck source=/dev/null
-    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+    if [ -f "$HOME/.bashrc" ]; then
+        set +eu
+        source "$HOME/.bashrc"
+        set -eu
+    fi
 
     # Résolution du token GitHub : $GITHUB_TOKEN puis 'gh auth token'
     if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh &>/dev/null; then
