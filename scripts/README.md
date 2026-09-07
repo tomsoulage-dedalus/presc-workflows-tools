@@ -5,6 +5,7 @@
 | **create-war-and-deploy**  | `create-war-and-deploy <TICKET> [options] [mvn args]`  | n'importe quelle branche | Build + deploy ORME packagés avec mapping de version configurable          | Résout le bon snapshot Nexus via une ligne de version (`--version-line`), construit `orbis-medication.war`, puis lance le script de déploiement configuré |
 | **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Merge un defect dans une autre version dans un worktree distinct           | Merge les commits d'un defect/story dans une autre version. Repo utilisé: `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
 | **switch-branch-all-repos** | `switch-branch-all-repos`                             | n'importe quelle branche | Modifie la branche courante de tous les repos locaux en une seule commande | Modifie et met à jour la branche courante de tous les repos locaux                                                                                         |
+| **update-lib**             | `update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | dans un repo prescription-app/prescription-lib | Met à jour une dépendance npm et crée le commit dédié en une seule commande | Demande un `BUG_ID` (ou l'accepte via `--bug`), choisit une branche `*/develop` comme base, vérifie les changements en cours, crée la branche `bugfix`/`quality`, met à jour la lib choisie et commit. `--test` enchaîne aussi `npm install`, la vérification du proxy et `npm start` |
 
 ## Exemples d'utilisation
 

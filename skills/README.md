@@ -34,7 +34,6 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 | **pr-create**      | `/pr-create` | branche de la tâche | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Génère et crée la Pull Request GitHub (draft) vers `develop` avec le bon format de titre et le label WORKFLOWS                                |
 | **pr-fix-comment** | `/pr-fix-comment` | branche de la tâche | Fix ciblé sans avoir à retrouver le contexte du commentaire                | Fixe un commentaire de review Copilot sur la PR courante                                                                                      |
 | **pr-fix-build**   | `/pr-fix-build <branch> <fix>` | n'importe quelle branche | Corrige la branche d'une PR sans `git stash` ni `checkout`                 | Corrige le build d'une branche distante (format, lint, tests) sans changer de branche locale                                                  |
-| **update-lib**     | `/update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | n'importe quelle branche | Met à jour une dépendance npm sur app+lib                                  | Met à jour une dépendance npm app/lib, en la spécifiant ou pas (liste proposée dans ce cas), peut lancer en suivant un npm start (avec --test) |
 
 ## Exemples d'utilisation
 
@@ -129,10 +128,6 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 /update-lib --bug ORBISBUG-135 --lib @medication-statement/lib --test
 ```
 > Crée une branche, met à jour la version de @medication-statement/lib dans les package-lock.json de prescription-app et prescription-lib, crée le commit, lance npm install, vérifie que le proxy pointe bien sur FR et lance npm start
-```
-/update-lib --bug ORBISBUG-135
-```
-> Crée une branche, affiche la liste des dépendances existantes dans les package.json, permet d'en choisir une, met à jour la version de la lib choisie dans les package-lock.json de prescription-app et prescription-lib, crée le commit
 
 ## Workflow
 
