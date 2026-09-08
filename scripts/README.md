@@ -3,6 +3,7 @@
 | Script                     | Commande                                               | Quand | Avantage                                                                   | Description                                                                                                                                                |
 |----------------------------|--------------------------------------------------------|---|----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **create-war-and-deploy**  | `create-war-and-deploy <TICKET> [options] [mvn args]`  | n'importe quelle branche | Build + deploy ORME packagés avec mapping de version configurable          | Résout le bon snapshot Nexus via une ligne de version (`--version-line`), construit `orbis-medication.war`, puis lance le script de déploiement configuré |
+| **patch-presc-front**      | `patch-presc-front [--war PATH] [--skip-build]`        | après la construction d'un WAR | Test rapide d'un frontend local sans reconstruire le WAR | Construit le frontend Prescription, sauvegarde le WAR, remplace `webapp/prescription/` et vérifie l'archive |
 | **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Merge un defect dans une autre version dans un worktree distinct           | Merge les commits d'un defect/story dans une autre version. Repo utilisé: `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
 | **switch-branch-all-repos** | `switch-branch-all-repos`                             | n'importe quelle branche | Modifie la branche courante de tous les repos locaux en une seule commande | Modifie et met à jour la branche courante de tous les repos locaux                                                                                         |
 | **update-lib**             | `update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | dans un repo prescription-app/prescription-lib | Met à jour une dépendance npm et crée le commit dédié en une seule commande | Demande un `BUG_ID` (ou l'accepte via `--bug`), choisit une branche `*/develop` comme base, vérifie les changements en cours, crée la branche `bugfix`/`quality`, met à jour la lib choisie et commit. `--test` enchaîne aussi `npm install`, la vérification du proxy et `npm start` |
@@ -125,6 +126,39 @@ Pour ajouter un autre outil de déploiement, ajoute la même clé dans `DEPLOY_C
 ./scripts/create-war-and-deploy.sh ORBISBUG-40966 --replace-maven-args -U -Ppresc-dev
 ```
 > Ignore `DEFAULT_MAVEN_ARGS` et n'utilise que les args Maven passés sur la ligne de commande.
+---
+
+### `patch-presc-front`
+
+Avant la première utilisation, adapte les variables de la section `USER CONFIGURATION`
+placée en haut du script :
+
+```bash
+PRESCRIPTION_REPO="${HOME}/repos/orme-prescription"
+WAR_PATH="${HOME}/repos/orme-medication-packaging/deployment/orbis-medication-war/target/orbis-medication.war"
+```
+
+Build du frontend puis remplacement dans le WAR configuré :
+
+```bash
+./scripts/patch-presc-front.sh
+```
+
+Utilisation ponctuelle d'un autre WAR :
+
+```bash
+./scripts/patch-presc-front.sh --war /chemin/vers/orbis-medication.war
+```
+
+Réutilisation d'un build déjà présent dans `dist/prescription-app` :
+
+```bash
+./scripts/patch-presc-front.sh --skip-build
+```
+
+Le script crée une sauvegarde horodatée et restaure automatiquement le WAR si le
+remplacement ou la vérification échoue.
+
 ---
 
 ### `merge-commit-to-branch`
