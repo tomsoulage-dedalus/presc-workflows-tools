@@ -13,6 +13,26 @@ demande avant qu'elle ne devienne (ou non) un `ORBISBUG` ou un `HORME`.
 
 > Pour les tickets de développement (`HORME-`, `ORBISBUG-`), utiliser `/task-analyze`.
 
+## Installation
+
+À faire une seule fois sur un nouveau poste.
+
+**1. Variables Jira** dans `~/.bashrc` (chacun génère son propre PAT depuis son profil Jira) :
+
+```bash
+export JIRA_DOMAIN="jira.dedalus.com"
+export JIRA_API_TOKEN="<PAT Jira Server personnel>"
+```
+
+**2. Chemins des repos** — éditer `reposDir` dans `config.json` (voir ci-dessous) et retirer les
+repos absents du poste. Alternative sans modifier le fichier : exporter `REPOS_DIR`, qui a la
+priorité sur `config.json`.
+
+**3. Lier le skill** : `bash skills/setup.sh` depuis la racine de `presc-workflows-tools`.
+
+**Outils requis** : `curl`, `jq`, `python3`, `unzip` — tous standards, aucun paquet à installer.
+`pdftotext` est optionnel (sans lui, les PDF joints sont signalés comme non exploitables).
+
 ## Configuration requise
 
 - `JIRA_DOMAIN` : domaine Jira (ex. `jira.dedalus.com`)
@@ -25,16 +45,37 @@ demande avant qu'elle ne devienne (ou non) un `ORBISBUG` ou un `HORME`.
 Les chemins des repos ne sont **jamais** en dur : ils sont déclarés dans `config.json`, situé dans
 ce même dossier. Chaque entrée porte `name`, `path` (relatif à `reposDir`) et `description`.
 
+`config.json` est la **seule** source de vérité : lire `reposDir` et `reportDir` depuis le fichier,
+ne jamais les supposer.
+
 ```bash
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
-REPOS_DIR="${REPOS_DIR:-$HOME/work}"
+
+# reposDir vient de config.json ; la variable d'environnement REPOS_DIR reste prioritaire.
+REPOS_DIR="${REPOS_DIR:-$(jq -r '.reposDir' "$SKILL_DIR/config.json")}"
+REPOS_DIR="${REPOS_DIR/#\~/$HOME}"
+
+# Repli si le dossier configure n'existe pas sur ce poste.
+if [ ! -d "$REPOS_DIR" ]; then
+  for candidate in "$HOME/work" "$HOME/repos" "$HOME/dev"; do
+    [ -d "$candidate" ] && REPOS_DIR="$candidate" && break
+  done
+fi
+echo "reposDir : $REPOS_DIR"
+
 jq -r '.repositories[] | "\(.name)\t\(.description)"' "$SKILL_DIR/config.json"
 ```
+
+Si le repli a dû s'appliquer, **le signaler** à l'utilisateur et lui suggérer de corriger
+`reposDir` dans `config.json`. Si aucun candidat n'existe, afficher
+`Aucun dossier de repos trouvé — renseigner reposDir dans config.json` et poursuivre l'analyse
+sans investigation de code plutôt que d'échouer.
 
 Un ticket GSUPPORT ne se limite presque jamais au repo courant : le message d'erreur peut venir
 de `orme-prescription-api`, un libellé de `orme-common`, une règle historique de
 `orme-medication-legacy`. **Sélectionner les repos à fouiller à l'étape 6**, en confrontant le
-symptôme aux `description` de `config.json`. Ignorer un repo absent du disque sans bloquer.
+symptôme aux `description` de `config.json`. Ignorer un repo absent du disque sans bloquer, et
+lister les repos ignorés dans le rapport.
 
 Si `config.json` déclare une entrée pointant vers un fichier de **schéma de base de données**
 (markdown), le consulter **uniquement au `grep`** pour retrouver une table ou une colonne — ne
@@ -389,9 +430,12 @@ Sans cette table, une catégorie `Informations insuffisantes` n'est pas exploita
 
 Un rapport existant n'est **jamais** écrasé : il constitue l'historique de l'analyse.
 
+Le dossier de sortie vient de `reportDir` dans `config.json` (relatif à la racine du dépôt courant) :
+
 ```bash
+SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
 REPO_ROOT=$(git rev-parse --show-toplevel)
-REPORT_DIR="${REPO_ROOT}/.copilot/analyses"
+REPORT_DIR="${REPO_ROOT}/$(jq -r '.reportDir // ".copilot/analyses"' "$SKILL_DIR/config.json")"
 mkdir -p "$REPORT_DIR"
 
 REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT.md"

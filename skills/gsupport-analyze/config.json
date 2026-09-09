@@ -1,7 +1,7 @@
 {
-  "_comment": "Configuration du skill gsupport-analyze. Les chemins sont resolus a partir de reposDir. Adapter reposDir et la liste des repos a son poste.",
+  "_comment": "Configuration du skill gsupport-analyze. Adapter reposDir et la liste des repos a son poste. reposDir accepte le raccourci ~ ; la variable d'environnement REPOS_DIR est prioritaire sur cette valeur.",
 
-  "reposDir": "${REPOS_DIR:-$HOME/work}",
+  "reposDir": "~/work",
 
   "reportDir": ".copilot/analyses",
 
