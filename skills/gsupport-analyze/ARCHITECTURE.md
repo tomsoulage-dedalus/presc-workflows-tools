@@ -28,8 +28,9 @@ flowchart TD
     U([Utilisateur]) -->|/gsupport-analyze GSUPPORT-XXXXX| E0
 
     subgraph ORCH["Orchestrateur — session courante"]
-        E0["Étape 0<br/>Permissions + vérif. du modèle"]
-        E1["Étape 1<br/>Valider la clé GSUPPORT-"]
+        E0["Étape 0<br/>Résoudre la clé depuis le message,<br/>valider le préfixe GSUPPORT-"]
+        E1["Étape 1<br/>Permissions + vérif. du modèle"]
+        E1B["Étape 1b — optionnelle<br/>Pré-analyse utilisateur :<br/>couche, domaine, repos exclus, piste"]
         E3["Étape 3<br/>Router le domaine, choisir les repos,<br/>filtrer par version, résoudre origin/branche"]
         E5["Étape 5 — QUALIFICATION<br/>jamais déléguée"]
         E6["Étapes 6 et 7<br/>Hypothèses, infos manquantes, actions"]
@@ -46,13 +47,14 @@ flowchart TD
         A4C["code-repo-C"]
     end
 
-    E0 --> E1 --> A2
+    E0 --> E1 --> E1B --> A2
     A2 -->|digest-jira.md| E3
     E3 --> A4A & A4B & A4C
     A4A & A4B & A4C -->|digest-code-repo.md| E5
     E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
 
     CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
+    E1B -.->|périmètre imposé : repos écartés| E3
     CFG -.->|model + reasoningEffort| A2
     CFG -.->|model + reasoningEffort| A4A
 
@@ -64,7 +66,7 @@ flowchart TD
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1 — permissions, modèle, validation de la clé | orchestrateur | — |
+| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `digest-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `digest-code-<repo>.md` |

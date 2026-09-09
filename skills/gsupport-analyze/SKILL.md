@@ -150,7 +150,7 @@ courante, le working tree ou les stashes. Tout est faisable en lecture seule sur
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 
-Si l'utilisateur a accepté `/allow-all` à l'étape 0, ce tableau reste la règle de conduite : les
+Si l'utilisateur a accepté `/allow-all` à l'étape 1, ce tableau reste la règle de conduite : les
 opérations de la colonne de droite continuent d'être annoncées et validées explicitement.
 
 ## Architecture d'exécution — orchestrateur et sous-agents
@@ -165,7 +165,7 @@ chez l'orchestrateur.
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1 — permissions, modèle, validation de la clé | orchestrateur | — |
+| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `digest-jira.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `digest-code-<repo>.md` |
@@ -184,8 +184,9 @@ Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice
 
 ### Ce qui ne se délègue jamais
 
-- Toute question à l'utilisateur (`ask_user`) : permissions, `reposDir` introuvable, repo requis
-  manquant, branche approchante à confirmer. Un sous-agent ne peut pas dialoguer.
+- Toute question à l'utilisateur (`ask_user`) : permissions, pré-analyse (étape 1b), `reposDir`
+  introuvable, repo requis manquant, branche approchante à confirmer. Un sous-agent ne peut pas
+  dialoguer.
 - La **qualification** (étape 5) : elle croise Jira, code et contradictions entre commentaires.
   C'est la raison d'être du skill, elle reste chez l'orchestrateur.
 - L'écriture du rapport final.
@@ -245,7 +246,7 @@ Passer ces valeurs aux paramètres `model` et `reasoning_effort` de l'outil `tas
   d'un autre poste ne doit jamais bloquer un ticket.
 
 **Le modèle de l'orchestrateur, lui, ne se force pas** : il dépend du `/model` de la session. C'est
-pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 0.
+pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 1.
 
 ## Commande
 
@@ -254,13 +255,42 @@ pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 0.
 `<ISSUE_KEY>` accepte aussi une URL complète (`https://jira.dedalus.com/browse/GSUPPORT-47944`) :
 extraire la clé de l'URL le cas échéant.
 
+### Résolution de l'ISSUE_KEY
+
+L'argument tapé après la commande **n'est pas transmis au skill** : il reste dans le message de
+l'utilisateur. Sans règle explicite, la clé est ignorée et redemandée alors qu'elle a déjà été
+fournie. La résoudre est donc la toute première action, avant toute question.
+
+Chercher, dans cet ordre, et s'arrêter au premier résultat :
+
+1. un motif `GSUPPORT-\d+` dans le **message qui a déclenché le skill** ;
+2. une URL `https://<domaine>/browse/GSUPPORT-\d+` dans ce même message → en extraire la clé ;
+3. un motif `GSUPPORT-\d+` dans les messages récents de la session (ticket en cours de discussion).
+
+Une fois résolue, la clé est **figée pour toute l'analyse** : ne plus jamais la redemander, y
+compris après une interruption pour `/allow-all`, et la rappeler dans chaque message qui attend une
+action de l'utilisateur.
+
 ---
 
-## Étape 0 — Permissions
+## Étape 0 — Valider la clé
+
+```
+Si aucune clé n'a pu être résolue :
+  → demander via `ask_user` : « Quel ticket GSUPPORT veux-tu analyser ? (ex. GSUPPORT-47944) »
+  → accepter une clé nue ou une URL Jira
+
+Si la clé ne commence pas par "GSUPPORT-" :
+  → afficher "Préfixe inattendu. Ce skill traite uniquement les tickets GSUPPORT-XXXXX.
+     Pour HORME-/ORBISBUG-, utiliser /task-analyze."
+  → arrêter
+```
+
+## Étape 1 — Permissions
 
 L'analyse enchaîne des dizaines d'appels `curl`, `git`, `grep` et d'écritures dans `/tmp`. Valider
-chaque demande une par une casse le rythme et fait perdre du temps. **Avant toute autre action**,
-poser la question une seule fois, via `ask_user` :
+chaque demande une par une casse le rythme et fait perdre du temps. Une fois la clé résolue et
+**avant toute exécution de commande**, poser la question une seule fois, via `ask_user` :
 
 ```
 Titre  : Autorisez-vous l'exécution sans confirmation ?
@@ -273,9 +303,11 @@ Choix  : - Oui, activer /allow-all pour cette session (recommandé)
 
 Selon la réponse :
 
-- **Oui** → répondre : « Tape `/allow-all` puis relance `/gsupport-analyze <ISSUE_KEY>`. »
-  et **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
-  interactive, seul l'utilisateur peut la taper.
+- **Oui** → répondre : « Tape `/allow-all`, je reprends ensuite sur `<ISSUE_KEY>`. » et
+  **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
+  interactive, seul l'utilisateur peut la taper. La clé reste connue : au message suivant,
+  reprendre directement à l'étape 2 **sans redemander le numéro de ticket** ni exiger de retaper
+  la commande.
 - **Non** → continuer normalement, en respectant strictement le tableau « Exécution autonome ».
 
 Ne jamais reposer la question pendant l'analyse.
@@ -308,14 +340,63 @@ de toute façon <agents.codeInvestigate.model>.
 Ne pas répéter l'avertissement pendant l'analyse, et le reporter en une ligne dans le rapport :
 la confiance d'une qualification dépend du modèle qui l'a produite.
 
-## Étape 1 — Valider la clé
+## Étape 1b — Pré-analyse de l'utilisateur — **optionnelle**
+
+L'utilisateur a souvent déjà regardé le ticket avant de lancer le skill : il sait que le bug est
+purement front Angular, ou qu'il vient du paramétrage. Sans cette information, l'étape 3 route à
+l'aveugle et l'étape 4 lance des agents sur des repos hors sujet — du temps et du contexte perdus,
+et du bruit dans le rapport.
+
+Poser la question **une seule fois**, via `ask_user`, tous les champs facultatifs. Proposer
+explicitement de passer : un utilisateur qui ne sait pas ne doit pas se sentir obligé d'inventer un
+périmètre, une mauvaise restriction est pire que pas de restriction du tout.
 
 ```
-Si <ISSUE_KEY> ne commence pas par "GSUPPORT-" :
-  → afficher "Préfixe inattendu. Ce skill traite uniquement les tickets GSUPPORT-XXXXX.
-     Pour HORME-/ORBISBUG-, utiliser /task-analyze."
-  → arrêter
+Titre  : As-tu déjà une piste sur ce ticket ?
+Texte  : Facultatif. Si tu sais déjà où se situe le problème, l'analyse évite de fouiller des
+         repos sans rapport. Laisse vide ou décline si tu préfères que le skill route seul.
+
+Champs :
+  - Couche concernée (multi-select, facultatif)
+      front Angular | front GWT legacy | back Java | API / REST | configuration PGD |
+      référentiel médicament | base de données | je ne sais pas
+  - Domaine métier (select, facultatif)      -> alimenté par `domains[].label` de config.json,
+                                                plus un choix « laisser le skill router »
+  - Repos à exclure (multi-select, facultatif) -> alimenté par `repositories[].name`
+  - Piste déjà identifiée (texte libre, facultatif)
+      ex. « erreur levée à la validation, seulement pour les lignes si besoin »
 ```
+
+Alimenter les listes depuis `config.json` — ne rien écrire en dur :
+
+```bash
+jq -r '.domains[].label'      "$SKILL_DIR/config.json"
+jq -r '.repositories[].name'  "$SKILL_DIR/config.json"
+```
+
+Exploitation des réponses :
+
+| Réponse | Effet |
+|---|---|
+| Couche concernée | restreint les `paths` transmis aux agents (étape 4) et écarte les repos sans rapport : « front Angular » seul → pas d'agent sur `orme-medication-legacy` ni `orme-global-repo` |
+| Domaine métier | court-circuite le routage 3.1 : le domaine est retenu d'office, ses `paths`, `i18nBundles` et `grepSeeds` sont utilisés tels quels |
+| Repos à exclure | aucun sous-agent n'est lancé sur ces repos |
+| Piste déjà identifiée | recopiée telle quelle dans le prompt des agents de l'étape 4 et dans le rapport |
+
+Trois garde-fous, sans lesquels cette étape dégraderait l'analyse au lieu de l'accélérer :
+
+1. **Formulaire décliné, vide ou « je ne sais pas » → comportement inchangé** : routage automatique
+   complet, aucun repo écarté. Ne pas insister, ne pas reposer la question.
+2. **La restriction est une indication forte, pas un mur.** Un agent qui ne trouve rien dans le
+   périmètre imposé le **signale** au lieu de conclure `Aucun code pertinent identifié.` :
+   l'orchestrateur peut alors proposer d'élargir. Une hypothèse de l'utilisateur reste une
+   hypothèse — le ticket peut la contredire.
+3. **La restriction est tracée dans le rapport** (`Périmètre restreint par l'utilisateur`). Une
+   conclusion tirée sur un périmètre réduit ne se lit pas comme une conclusion tirée sur l'ensemble.
+
+Si la collecte Jira (étape 2) contredit franchement la pré-analyse — le ticket décrit une erreur
+backend alors que l'utilisateur a annoncé « front Angular » —, le dire à l'étape 3 et proposer
+d'élargir plutôt que d'appliquer la restriction en silence.
 
 ## Étape 2 — Collecte Jira — **déléguée à un sous-agent**
 
@@ -602,6 +683,10 @@ sous-agent ne sait pas faire. Elle produit le contexte exact que recevront les a
 
 ### 3.1 — Choisir les repos
 
+**Partir de la pré-analyse (étape 1b) si elle a été renseignée** : un domaine imposé remplace le
+routage ci-dessous, une couche annoncée et des repos exclus retirent d'office des candidats. Ne
+réexécuter le routage complet que sur ce qui reste ouvert.
+
 #### Router par domaine métier
 
 `config.json` porte une table `domains` : chaque domaine décrit un périmètre fonctionnel avec ses
@@ -859,6 +944,7 @@ cette étape interdit. Le prompt doit contenir :
 | Scénario de reproduction résumé | pour confronter la règle trouvée au cas client |
 | La chaîne de recherche 4.1 → 4.6 et les consignes de recherche ci-dessous | sa méthode |
 | Le rôle du repo (`description` de `config.json`) | pour cadrer son périmètre |
+| La **pré-analyse de l'utilisateur** (étape 1b), si renseignée : couche, piste | l'oriente d'emblée ; préciser que c'est une hypothèse à confirmer, pas une consigne, et qu'il doit **signaler** s'il ne trouve rien dans ce périmètre plutôt que de conclure à l'absence de code pertinent |
 
 Récupérer les éléments du domaine pour un repo donné :
 
@@ -1159,6 +1245,8 @@ Même contenu dans le fichier et dans le chat.
 
 **Repos requis manquants** : <liste + commande `git clone`, ou "aucun">
 **Non vérifié faute de repo** : <ce qui n'a pas pu être confirmé, ou "rien">
+**Périmètre restreint par l'utilisateur** : <couche / domaine / repos exclus / piste fournie à
+l'étape 1b, ou "non — routage automatique complet">
 
 ### Chaîne de raisonnement
 1. Point de départ : <message d'erreur / écran / libellé>
