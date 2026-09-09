@@ -20,6 +20,38 @@ demande avant qu'elle ne devienne (ou non) un `ORBISBUG` ou un `HORME`.
 
 > Les variables sont définies dans `~/.bashrc`. **Toujours lancer `source ~/.bashrc`** avant toute action.
 
+### Repos analysables — `config.json`
+
+Les chemins des repos ne sont **jamais** en dur : ils sont déclarés dans `config.json`, situé dans
+ce même dossier. Chaque entrée porte `name`, `path` (relatif à `reposDir`) et `description`.
+
+```bash
+SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
+REPOS_DIR="${REPOS_DIR:-$HOME/work}"
+jq -r '.repositories[] | "\(.name)\t\(.description)"' "$SKILL_DIR/config.json"
+```
+
+Un ticket GSUPPORT ne se limite presque jamais au repo courant : le message d'erreur peut venir
+de `orme-prescription-api`, un libellé de `orme-common`, une règle historique de
+`orme-medication-legacy`. **Sélectionner les repos à fouiller à l'étape 6**, en confrontant le
+symptôme aux `description` de `config.json`. Ignorer un repo absent du disque sans bloquer.
+
+Si `config.json` déclare une entrée pointant vers un fichier de **schéma de base de données**
+(markdown), le consulter **uniquement au `grep`** pour retrouver une table ou une colonne — ne
+jamais le lire en entier.
+
+## Exécution autonome
+
+| Pré-autorisé — exécuter sans demander | Demande confirmation |
+|---|---|
+| Appels Jira en lecture (`curl` GET) | Écriture sur un fichier existant |
+| Téléchargement des pièces jointes dans `/tmp` | Suppression de fichiers |
+| `grep`, `glob`, `view`, lecture de fichiers | Toute commande git modifiant l'état du dépôt |
+| Extraction d'archives dans `/tmp` | Installation de paquets |
+| Création du dossier de rapport et écriture d'un **nouveau** fichier | Commit / push |
+
+Ne jamais demander « je continue ? » pour une opération pré-autorisée.
+
 ## Commande
 
 ### `/gsupport-analyze <ISSUE_KEY>`
@@ -202,28 +234,76 @@ curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/jso
 Recenser : liens Confluence, liens ServiceNow (Master Ticket), tickets Jira liés
 (`fields.issuelinks[]`), ticket miroir (`External ID`), et tout `ORBISBUG`/`HORME` déjà créé.
 
-Si un ticket lié existe déjà, le lire (`/rest/api/2/issue/<KEY>?fields=summary,status,resolution`)
-pour savoir si le sujet a déjà été traité.
+Pour **chaque** ticket lié, suivre le lien sur **un niveau** et récupérer aussi sa **description** —
+pas seulement son titre : un ticket lié contient fréquemment l'analyse déjà menée, le motif de
+rejet ou le correctif appliqué.
+
+```bash
+curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/json" \
+  "https://${JIRA_DOMAIN}/rest/api/2/issue/<LINKED_KEY>?fields=summary,status,resolution,description,components,labels,fixVersions"
+```
+
+Conclure explicitement : le sujet a-t-il **déjà** été traité, rejeté, ou corrigé dans une version ?
 
 ## Étape 6 — Investigation du code
 
-Point d'entrée le plus efficace : **le message d'erreur exact** remonté par le client (souvent
-présent dans la description, un commentaire ou une capture).
+### 6.0 — Choisir les repos
 
-1. Chercher le message dans les fichiers de traduction / bundles pour retrouver sa **clé**.
-2. Chercher cette clé dans le code back (Java/Jakarta EE) et front (Angular) pour trouver
-   **qui lève l'erreur** et sous quelle condition.
-3. Remonter la condition métier jusqu'à la règle en cause, et confronter cette règle au scénario
-   décrit par le client.
-4. Compléter par des recherches sur les termes du domaine (entité, action, workflow concerné).
+Lire `config.json`, confronter le symptôme aux `description`, et retenir les repos pertinents.
+Annoncer la sélection et la justifier en une ligne par repo. Commencer par le plus probable.
 
-Produire pour chaque fichier pertinent : chemin, rôle, extrait de code (10–30 lignes max).
+### Chaîne de recherche
 
-Vérifier aussi la **version détectée** (`[G] Detected in Version`) : la règle en cause existe-t-elle
-déjà dans cette version, ou a-t-elle été introduite / corrigée depuis ? Le client parle souvent de
-« régression » — le confirmer ou l'infirmer avec l'historique git.
+Suivre cet ordre : chaque étape fournit le point d'entrée de la suivante. Ne pas sauter d'étape,
+ne pas partir en recherche large.
 
-Si rien n'est trouvé : écrire `Aucun code pertinent identifié.`
+**6.1 — Message d'erreur et libellés**
+Point d'entrée le plus efficace : le **texte exact** remonté par le client (description,
+commentaire, ou capture d'écran). Le chercher dans les bundles i18n / `resources/` pour retrouver
+sa **clé**, puis chercher cette clé dans le code.
+
+**6.2 — Écran / composant front**
+Si un écran est identifié : localiser le composant Angular (ou GWT) qui l'affiche, son template
+et son service.
+
+**6.3 — Point d'entrée REST**
+Depuis le service front : retrouver l'endpoint appelé côté back (`@Path`, `@GET`, `@POST`, DTO
+correspondant).
+
+**6.4 — Logique métier**
+Depuis le contrôleur : remonter aux services et **à la condition exacte qui lève l'erreur**.
+Confronter cette règle au scénario décrit par le client.
+
+**6.5 — Données / persistance**
+Si le problème est lié aux données : entités JPA, requêtes, migrations, contraintes. Utiliser le
+schéma DB au `grep` si `config.json` en déclare un.
+
+**6.6 — Configuration et tests**
+Fichiers de configuration, feature flags, paramétrage client. Puis les tests existants qui
+couvrent (ou devraient couvrir) le comportement : un test qui affirme le comportement dénoncé
+oriente fortement vers « comportement attendu ».
+
+### Consignes de recherche
+
+- `grep` sur des motifs ciblés, jamais de recherche large ; limiter les résultats (`head_limit`).
+- `glob` pour trouver les fichiers par nom, puis `view` avec `view_range` sur la zone utile.
+- Java : `.java` (classes, méthodes, annotations) · Angular : `.ts`, `.html` · SQL : `.sql` ·
+  config : `.properties`, `.yml`, `.json`.
+
+### Version et régression
+
+Vérifier la **version détectée** (`[G] Detected in Version`) : la règle en cause existe-t-elle déjà
+dans cette version, ou a-t-elle été introduite / corrigée depuis ? Le client parle souvent de
+« régression » — le confirmer ou l'infirmer avec l'historique git (`git log -S`, `git log` sur le
+fichier fautif).
+
+### Restitution
+
+Pour chaque fichier retenu : repo, chemin, plage de lignes, extrait (10–30 lignes max) et
+explication de son rôle dans le symptôme. Restituer le résultat comme une **chaîne de raisonnement
+traçable** (message d'erreur → front → REST → service → données), pas comme une liste de fichiers.
+
+Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser les repos fouillés.
 
 ## Étape 7 — Qualification
 
@@ -260,26 +340,49 @@ Lister 2 à 4 hypothèses classées de la plus à la moins probable :
 - **Correction envisagée** : changement concret
 - **Impact / risque** : effets de bord, périmètre de régression
 
-## Étape 9 — Prochaines actions
+## Étape 9 — Informations manquantes et prochaines actions
 
-- Questions précises à poser au client (numérotées, chacune justifiée par un manque identifié).
-- Vérifications à faire en interne (base, logs, environnement, version).
+### Informations manquantes
+
+Pour **chaque** information qui manque à la conclusion, préciser trois choses :
+
+| Information | Pourquoi elle est nécessaire | Qui peut la fournir |
+|---|---|---|
+
+Sans cette table, une catégorie `Informations insuffisantes` n'est pas exploitable.
+
+### Prochaines actions
+
+- Questions précises à poser au client (numérotées, chacune rattachée à une ligne du tableau ci-dessus).
+- Vérifications à faire en interne (base, logs, environnement, version livrée).
 - Brouillon de réponse support (ton factuel, sans jargon interne, en anglais si le ticket est en anglais).
 - Si un `ORBISBUG` ou un `HORME` est à créer : titre proposé et résumé prêt à copier.
 
 ## Étape 10 — Sauvegarder le rapport
 
+Un rapport existant n'est **jamais** écrasé : il constitue l'historique de l'analyse.
+
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-mkdir -p "${REPO_ROOT}/.copilot/analyses"
+REPORT_DIR="${REPO_ROOT}/.copilot/analyses"
+mkdir -p "$REPORT_DIR"
+
+REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT.md"
+n=2
+while [ -e "$REPORT" ]; do
+  REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT-${n}.md"
+  n=$((n + 1))
+done
+echo "$REPORT"
 ```
 
-Écrire `${REPO_ROOT}/.copilot/analyses/<ISSUE_KEY>-GSUPPORT.md` avec le contenu de l'étape 11,
-puis afficher :
+Écrire le contenu de l'étape 11 dans `$REPORT`, puis afficher :
 
 ```
-Rapport sauvegardé : <repo_root>/.copilot/analyses/<ISSUE_KEY>-GSUPPORT.md
+Rapport sauvegardé : <chemin>
 ```
+
+Si un rapport précédent existe, le signaler et indiquer **ce qui a changé** depuis.
 
 En cas d'échec d'écriture : afficher `Impossible de sauvegarder le rapport : <erreur>` et continuer.
 
@@ -360,14 +463,26 @@ Même contenu dans le fichier et dans le chat.
 
 ## Investigation du code
 
-### <chemin/du/fichier>
+**Repos fouillés** : <liste + justification en une ligne>
+
+### Chaîne de raisonnement
+1. Point de départ : <message d'erreur / écran / libellé>
+2. Front : <composant>
+3. REST : <endpoint>
+4. Métier : <service + condition qui lève l'erreur>
+5. Données / configuration : <...>
+
+### <repo> — <chemin/du/fichier>:<lignes>
 Rôle : <...>
 
 ```<langage>
 <extrait>
 ```
 
-<ou "Aucun code pertinent identifié.">
+### Version et régression
+<la règle existe-t-elle dans la version détectée ? confirmation ou infirmation de la régression>
+
+<ou "Aucun code pertinent identifié." + repos fouillés>
 
 ## Qualification
 
@@ -391,9 +506,17 @@ Rôle : <...>
 ### Hypothèse 1 — <titre court>
 - **Probabilité** : <...>
 - **Mécanisme** : <...>
-- **Localisation** : <fichier / méthode>
+- **Localisation** : <repo / fichier / méthode>
 - **Correction envisagée** : <...>
 - **Impact / risque** : <...>
+
+## Informations manquantes
+
+| Information | Pourquoi elle est nécessaire | Qui peut la fournir |
+|---|---|---|
+| <...> | <...> | <...> |
+
+<ou "Aucune — l'analyse est concluante en l'état.">
 
 ## Prochaines actions
 

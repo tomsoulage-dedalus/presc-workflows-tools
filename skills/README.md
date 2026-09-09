@@ -59,7 +59,9 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 /gsupport-analyze GSUPPORT-47944
 /gsupport-analyze https://jira.dedalus.com/browse/GSUPPORT-47944
 ```
-> Analyse une remontée **client**. Lit le ticket, **tous** les commentaires et **toutes** les pièces jointes (captures, scénarios `.docx` et leurs images embarquées), investigue le code à partir du message d'erreur, puis **qualifie** la demande : bug dans notre code, problème de configuration/données, comportement attendu, évolution, ou informations insuffisantes. Génère `.copilot/analyses/<KEY>-GSUPPORT.md` avec les hypothèses, les questions à poser au client et un brouillon de réponse support.
+> Analyse une remontée **client**. Lit le ticket, **tous** les commentaires et **toutes** les pièces jointes (captures, scénarios `.docx` et leurs images embarquées), investigue le code **sur plusieurs repos** (`config.json`) en suivant la chaîne message d'erreur → front → REST → service → données, puis **qualifie** la demande : bug dans notre code, problème de configuration/données, comportement attendu, évolution, ou informations insuffisantes. Génère `.copilot/analyses/<KEY>-GSUPPORT.md` avec les hypothèses, les informations manquantes (et qui peut les fournir), les questions à poser au client et un brouillon de réponse support.
+>
+> Les repos fouillés sont déclarés dans `skills/gsupport-analyze/config.json` — à adapter à son poste.
 >
 > C'est l'étape **amont** de `/task-analyze` : elle décide si un `ORBISBUG` ou un `HORME` doit être créé.
 
