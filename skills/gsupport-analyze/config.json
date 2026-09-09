@@ -24,12 +24,14 @@
     {
       "name": "orme-medication-legacy",
       "path": "orme-medication-legacy",
-      "description": "Services medication historiques iPharma (livret, formulaire, pharmacy-workflow, medication-workflow, ipharma-core, loc FR). A regarder pour le referentiel produit, les workflows pharmacie et les comportements anterieurs a la reprise Angular."
+      "description": "Services medication historiques iPharma (livret, formulaire, pharmacy-workflow, medication-workflow, ipharma-core, loc FR). Remplace orme-global-repo a partir de la version 3.22 : referentiel produit, workflows pharmacie et comportements anterieurs a la reprise Angular.",
+      "versionRange": ">=3.22"
     },
     {
       "name": "orme-global-repo",
       "path": "orme-global-repo",
-      "description": "Agregat medicationNG + modules iPharma (dont ipharma-db). A utiliser pour les questions de schema de donnees et de configuration globale."
+      "description": "Ancien agregat medicationNG + modules iPharma (dont ipharma-db). Valable uniquement pour les versions anterieures a 3.22 — au-dela, utiliser orme-medication-legacy.",
+      "versionRange": "<3.22"
     },
     {
       "name": "orme-pgd-config",

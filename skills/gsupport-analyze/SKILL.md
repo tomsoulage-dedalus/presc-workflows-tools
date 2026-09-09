@@ -252,6 +252,33 @@ Conclure explicitement : le sujet a-t-il **déjà** été traité, rejeté, ou c
 Lire `config.json`, confronter le symptôme aux `description`, et retenir les repos pertinents.
 Annoncer la sélection et la justifier en une ligne par repo. Commencer par le plus probable.
 
+#### Repos soumis à une version
+
+Une entrée peut porter un champ `versionRange` : elle n'est alors valable que pour les versions
+correspondantes. La version de référence est **`[G] Detected in Version`**
+(`customfield_22705`, ex. `ORBIS Medication 03.17.09.02` → `3.17`) — en extraire les deux premiers
+segments :
+
+```bash
+jq -r '.fields.customfield_22705.fields.summary // ""' /tmp/gsupport/<ISSUE_KEY>/issue.json \
+| grep -oE '[0-9]+\.[0-9]+' | head -1 | sed 's/^0*//;s/\.0*/./'
+```
+
+**Règle des repos medication legacy** — les deux repos couvrent le même périmètre selon la version,
+ne jamais fouiller les deux :
+
+| Version détectée | Repo à utiliser |
+|---|---|
+| **≥ 3.22** | `orme-medication-legacy` |
+| < 3.22 | `orme-global-repo` |
+
+À partir de la 3.22, `orme-global-repo` n'est plus la source de vérité : **ne pas le chercher**,
+utiliser `orme-medication-legacy`. Indiquer dans le rapport la version retenue et le repo
+correspondant.
+
+Si la version détectée est absente ou illisible, se rabattre sur `orme-medication-legacy`
+(cas le plus courant aujourd'hui) et le signaler explicitement comme une hypothèse.
+
 ### Chaîne de recherche
 
 Suivre cet ordre : chaque étape fournit le point d'entrée de la suivante. Ne pas sauter d'étape,
