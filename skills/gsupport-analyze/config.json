@@ -408,6 +408,8 @@
       "name": "orme-pgd-config",
       "path": "orme-pgd-config",
       "url": "git@github.com:dedalus-cis4u/orme-pgd-config.git",
+      "optIn": true,
+      "optInCondition": "Ne fouiller que si l'analyse pointe explicitement le parametrage PGD (message d'erreur de configuration, droit, profil, parametre client), ou si l'utilisateur le demande a l'etape 1b. Jamais retenu par le routage par defaut : ce n'est pas un repo de prescription.",
       "description": "Configuration et parametrage PGD — back Java, front Angular. A regarder en priorite quand l'hypothese est un probleme de configuration client plutot qu'un bug de code."
     }
   ],

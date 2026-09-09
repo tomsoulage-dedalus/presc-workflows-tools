@@ -226,6 +226,7 @@ flowchart TD
 - `domains.paths` et `grepSeeds` — à corriger dès qu'un chemin ne renvoie plus rien ;
 - `repositories.versionRange` — à mettre à jour à chaque bascule de version ;
 - `excludedRepositories` — les repos hors périmètre permanent (packaging, livraison) et leur motif ;
+- `repositories.optIn` / `optInCondition` — les repos jamais routés par défaut et la condition qui les réveille ;
 - `agents.*.model` — les identifiants de modèles évoluent, ils ne sont jamais en dur dans `SKILL.md`.
 
 Une analyse qui révèle une lacune doit corriger `config.json` dans la foulée et le mentionner.

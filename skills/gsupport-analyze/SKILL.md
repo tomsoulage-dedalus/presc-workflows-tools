@@ -80,6 +80,21 @@ logique métier.
 jq -r '.excludedRepositories[] | "\(.name)\t\(.reason)"' "$SKILL_DIR/config.json"
 ```
 
+Un repo portant `optIn: true` est un cas intermédiaire : il **n'est jamais retenu par le routage
+par défaut**, mais reste mobilisable quand son `optInCondition` est remplie — l'analyse désigne
+explicitement son périmètre, ou l'utilisateur l'a demandé à l'étape 1b. C'est le cas de
+`orme-pgd-config` : il n'a rien d'un repo de prescription, mais reste la seule source de vérité
+quand l'hypothèse retenue est un problème de paramétrage client.
+
+```bash
+jq -r '.repositories[] | select(.optIn == true) | "\(.name)\t\(.optInCondition)"' \
+  "$SKILL_DIR/config.json"
+```
+
+Le retenir sans que sa condition soit remplie fait perdre un sous-agent sur du code hors sujet ;
+l'oublier alors qu'elle l'est fait conclure « bug » sur ce qui n'est qu'une configuration. Dans les
+deux cas, l'indiquer dans le tableau des repos du rapport (`opt-in : retenu / non retenu`).
+
 ```bash
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
 
@@ -768,6 +783,11 @@ Un ticket peut ne relever d'aucun domaine, ou déborder du sien. Confronter alor
 `description` des repos, et retenir les repos pertinents. Annoncer la sélection et la justifier en
 une ligne par repo. Commencer par le plus probable.
 
+**Écarter d'emblée les repos `optIn: true`** de cette confrontation : leur `description` est
+attirante — celle de `orme-pgd-config` parle de configuration, ce que fait la moitié des tickets
+GSUPPORT — alors que leur `optInCondition` est bien plus étroite. Ne les rappeler qu'après coup, si
+la condition est explicitement remplie.
+
 #### Repos soumis à une version
 
 Un repo peut n'être valable que pour certaines versions : il porte alors un champ `versionRange`
@@ -1270,7 +1290,7 @@ Même contenu dans le fichier et dans le chat.
 
 | Repo | Requis | Branche analysée | Remarque |
 |---|---|---|---|
-| <repo> | oui / non | `origin/<branche>` | <exacte / plus proche confirmée / absent du poste / exclu> |
+| <repo> | oui / non | `origin/<branche>` | <exacte / plus proche confirmée / absent du poste / exclu / opt-in non retenu> |
 
 **Repos requis manquants** : <liste + commande `git clone`, ou "aucun">
 **Non vérifié faute de repo** : <ce qui n'a pas pu être confirmé, ou "rien">
