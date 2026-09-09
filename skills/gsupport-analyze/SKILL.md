@@ -381,6 +381,12 @@ git -C "$REPO" ls-tree -r --name-only "origin/<branche>"            # lister les
 git -C "$REPO" log -S "<motif>" "origin/<branche>" -- '<chemin>'    # tracer une regression
 ```
 
+**Pourquoi en local et pas via l'API GitHub** — la recherche de code GitHub n'indexe que la
+**branche par défaut** du dépôt (`main/develop`) et n'accepte aucun filtre de branche : elle
+renverrait le code le plus récent au lieu de celui de la version du client, ce que toute cette
+section vise justement à éviter. S'ajoutent un quota de 10 recherches/minute contre ~0,15 s par
+`git grep` local. **Ne pas remplacer ces commandes par une recherche GitHub.**
+
 #### Résoudre la branche depuis la version
 
 Les branches de version suivent le motif `<clé>/develop`, où la clé encode la version sur 7
