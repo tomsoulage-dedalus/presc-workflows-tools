@@ -388,7 +388,9 @@
       "name": "orme-common",
       "path": "orme-common",
       "url": "git@github.com:dedalus-cis4u/orme-common.git",
-      "description": "Briques transverses ORME — back Java, front Angular, resources partagees (dont i18n communs). A chercher quand un libelle ou une regle n'est pas trouve dans le module fonctionnel."
+      "optIn": true,
+      "optInCondition": "Ne fouiller qu'en second passage : quand un agent d'un module fonctionnel a rendu son compte rendu sans retrouver le libelle, la cle i18n ou la regle cherchee, ou si l'utilisateur le demande a l'etape 1b. Ne jamais le retenir d'emblee en meme temps que le module fonctionnel.",
+      "description": "Briques transverses ORME — back Java, front Angular, resources partagees (dont i18n communs, backend/legacy/shared). A chercher quand un libelle ou une regle n'est pas trouve dans le module fonctionnel."
     },
     {
       "name": "orme-medication-legacy",
@@ -408,13 +410,17 @@
       "name": "orme-pgd-config",
       "path": "orme-pgd-config",
       "url": "git@github.com:dedalus-cis4u/orme-pgd-config.git",
+      "optIn": true,
+      "optInCondition": "Ne fouiller que si l'analyse pointe explicitement le parametrage PGD (message d'erreur de configuration, droit, profil, parametre client), ou si l'utilisateur le demande a l'etape 1b. Jamais retenu par le routage par defaut : ce n'est pas un repo de prescription.",
       "description": "Configuration et parametrage PGD — back Java, front Angular. A regarder en priorite quand l'hypothese est un probleme de configuration client plutot qu'un bug de code."
-    },
+    }
+  ],
+  "excludedRepositories": [
     {
       "name": "orme-medication-packaging",
-      "path": "orme-medication-packaging",
       "url": "git@github.com:dedalus-cis4u/orme-medication-packaging.git",
-      "description": "Packaging, deploiement et DML (dml/, internal-dml/). Utile pour verifier ce qui est reellement livre dans une version donnee ([G] Detected in Version)."
+      "description": "Packaging, deploiement et DML (dml/, internal-dml/).",
+      "reason": "Exclu systematiquement de l'investigation GSUPPORT : ne contient aucune logique metier, seulement du packaging et des scripts de livraison. Ne jamais lancer de sous-agent dessus, ne pas le lister dans le diagnostic des repos, ne pas proposer de le cloner."
     }
   ]
 }

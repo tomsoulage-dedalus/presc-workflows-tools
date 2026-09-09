@@ -28,8 +28,8 @@ flowchart TD
     U([Utilisateur]) -->|/gsupport-analyze GSUPPORT-XXXXX| E0
 
     subgraph ORCH["Orchestrateur — session courante"]
-        E0["Étape 0<br/>Résoudre la clé depuis le message,<br/>valider le préfixe GSUPPORT-"]
-        E1["Étape 1<br/>Permissions + vérif. du modèle"]
+        E0["Étape 0<br/>Résoudre la clé : message, puis<br/>historique de saisie du CLI,<br/>valider le préfixe GSUPPORT-"]
+        E1["Étape 1 — jamais bloquante<br/>Conseil /allow-all + vérif. du modèle"]
         E1B["Étape 1b — optionnelle<br/>Pré-analyse utilisateur :<br/>couche, domaine, repos exclus, piste"]
         E3["Étape 3<br/>Router le domaine, choisir les repos,<br/>filtrer par version, résoudre origin/branche"]
         E5["Étape 5 — QUALIFICATION<br/>jamais déléguée"]
@@ -47,11 +47,18 @@ flowchart TD
         A4C["investigation-code-repo-C"]
     end
 
+    subgraph SUB4B["Étape 4 — second passage, repos optIn"]
+        A4D["investigation-code-orme-common<br/>ou orme-pgd-config"]
+    end
+
     E0 --> E1 --> E1B --> A2
     A2 -->|compte-rendu-jira.md| E3
     E3 --> A4A & A4B & A4C
     A4A & A4B & A4C -->|compte-rendu-code-repo.md| E5
     E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
+
+    A4A & A4B & A4C -.->|libellé ou règle introuvable,<br/>piste de paramétrage| A4D
+    A4D -.->|compte-rendu-code-repo.md| E5
 
     CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
     E1B -.->|périmètre imposé : repos écartés| E3
@@ -66,10 +73,11 @@ flowchart TD
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
+| Étapes 0, 1, 1b — résolution et validation de la clé, conseil de permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `compte-rendu-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `compte-rendu-code-<repo>.md` |
+| Étape 4 — second passage sur les repos `optIn`, si la première vague le justifie | idem, déclenché par l'orchestrateur | `compte-rendu-code-<repo>.md` |
 | Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<KEY>-analyse.md` |
 
 Ne se délègue **jamais** :
@@ -214,6 +222,8 @@ flowchart TD
 | Images non exploitables par le sous-agent | L'orchestrateur les regarde après coup, sans relancer tout le bloc |
 | Archive non décompressable | `Archive non décompressée : <nom> — <raison>` dans le rapport |
 | Rapport existant | Jamais écrasé : suffixe `-2`, `-3`… et mention de ce qui a changé |
+| Confirmations de permissions à répétition | Conseiller `/allow-all` en une ligne et **continuer** — ne jamais suspendre l'analyse en attendant que l'utilisateur le tape |
+| Clé absente du message déclencheur (slash-command : le CLI n'en transmet pas l'argument) | La relire dans `~/.copilot/command-history-state.json`, annoncer « clé reprise de ta commande », ne demander qu'en dernier recours |
 
 ## 9. Ce qu'il faut entretenir
 
@@ -223,6 +233,8 @@ flowchart TD
 - `glossary` — tout terme client rencontré et absent doit y être ajouté ;
 - `domains.paths` et `grepSeeds` — à corriger dès qu'un chemin ne renvoie plus rien ;
 - `repositories.versionRange` — à mettre à jour à chaque bascule de version ;
+- `excludedRepositories` — les repos hors périmètre permanent (packaging, livraison) et leur motif ;
+- `repositories.optIn` / `optInCondition` — les repos jamais routés par défaut et la condition qui les réveille ;
 - `agents.*.model` — les identifiants de modèles évoluent, ils ne sont jamais en dur dans `SKILL.md`.
 
 Une analyse qui révèle une lacune doit corriger `config.json` dans la foulée et le mentionner.
