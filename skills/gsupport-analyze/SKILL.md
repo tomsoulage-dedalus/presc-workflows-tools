@@ -1,6 +1,6 @@
 ---
 name: "gsupport-analyze"
-description: "Analyse d'un ticket client GSUPPORT : lit le ticket, tous les commentaires et toutes les pièces jointes, investigue le code, qualifie la nature du problème (bug / config / comportement attendu / évolution) et sauvegarde un GSUPPORT.md — sans créer de branche ni de PR"
+description: "Analyse d'un ticket client GSUPPORT : lit le ticket, tous les commentaires et toutes les pièces jointes, investigue le code, qualifie la nature du problème (bug / config / comportement attendu / évolution) et sauvegarde un rapport <ISSUE_KEY>-analyse.md — sans créer de branche ni de PR"
 ---
 
 # GSupport Analyze Skill
@@ -36,8 +36,9 @@ signalé comme un problème.
 
 **3. Lier le skill** : `bash skills/setup.sh` depuis la racine de `presc-workflows-tools`.
 
-**Outils requis** : `curl`, `jq`, `python3`, `unzip` — tous standards, aucun paquet à installer.
-`pdftotext` est optionnel (sans lui, les PDF joints sont signalés comme non exploitables).
+**Outils requis** : `curl`, `jq`, `python3`, `unzip`, `tar`, `gzip` — tous standards, aucun paquet à
+installer. `pdftotext`, `7z` et `unrar` sont optionnels (sans eux, les PDF et les archives `.7z`/`.rar`
+joints sont signalés comme non exploitables).
 
 ## Configuration requise
 
@@ -149,7 +150,7 @@ courante, le working tree ou les stashes. Tout est faisable en lecture seule sur
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 
-Si l'utilisateur a accepté `/allow-all` à l'étape 0, ce tableau reste la règle de conduite : les
+Si l'utilisateur a accepté `/allow-all` à l'étape 1, ce tableau reste la règle de conduite : les
 opérations de la colonne de droite continuent d'être annoncées et validées explicitement.
 
 ## Architecture d'exécution — orchestrateur et sous-agents
@@ -164,11 +165,11 @@ chez l'orchestrateur.
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1 — permissions, modèle, validation de la clé | orchestrateur | — |
-| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `digest-jira.md` |
+| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
+| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `compte-rendu-jira.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
-| Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `digest-code-<repo>.md` |
-| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `GSUPPORT.md` |
+| Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `compte-rendu-code-<repo>.md` |
+| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<ISSUE_KEY>-analyse.md` |
 
 ### Règle du passage par fichiers
 
@@ -183,8 +184,9 @@ Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice
 
 ### Ce qui ne se délègue jamais
 
-- Toute question à l'utilisateur (`ask_user`) : permissions, `reposDir` introuvable, repo requis
-  manquant, branche approchante à confirmer. Un sous-agent ne peut pas dialoguer.
+- Toute question à l'utilisateur (`ask_user`) : permissions, pré-analyse (étape 1b), `reposDir`
+  introuvable, repo requis manquant, branche approchante à confirmer. Un sous-agent ne peut pas
+  dialoguer.
 - La **qualification** (étape 5) : elle croise Jira, code et contradictions entre commentaires.
   C'est la raison d'être du skill, elle reste chez l'orchestrateur.
 - L'écriture du rapport final.
@@ -196,14 +198,15 @@ train de travailler ni sur quoi. Renseigner **`name`** et **`description`** à c
 
 | Bloc | `name` | `description` |
 |---|---|---|
-| Étape 2 | `collecte-jira-<ISSUE_KEY>` | `Collecte Jira <ISSUE_KEY>` |
-| Étape 4 | `code-<repo>` | `Investigation <repo> sur <branche>` |
+| Étape 2 | `collecte-ticket-jira-<ISSUE_KEY>` | `Collecte Jira <ISSUE_KEY>` |
+| Étape 4 | `investigation-code-<repo>` | `Investigation <repo> sur <branche>` |
 
-Exemples : `collecte-jira-GSUPPORT-47944`, `code-orme-prescription` avec la description
-`Investigation orme-prescription sur 317XXXX/develop`.
+Exemples : `collecte-ticket-jira-GSUPPORT-47944`, `investigation-code-orme-prescription` avec la
+description `Investigation orme-prescription sur 317XXXX/develop`.
 
-Le nom porte **le repo, pas un numéro** : `code-1`, `code-2` ne dit rien quand trois agents
-tournent ensemble. Quand un digest sera relu à l'étape 5, c'est par ce nom qu'on le retrouvera.
+Le nom porte **le repo, pas un numéro** : `investigation-code-1`, `investigation-code-2` ne dit
+rien quand trois agents tournent ensemble. Quand un compte rendu sera relu à l'étape 5, c'est par ce nom
+qu'on le retrouvera.
 
 ### Consignes communes à tous les sous-agents
 Les sous-agents sont **sans mémoire** : chaque prompt doit être autoportant. Y inclure
@@ -214,7 +217,7 @@ systématiquement :
 - le rappel du masquage des données patient (`Contains PID`),
 - la contrainte de sortie : écrire le fichier, ne renvoyer qu'une synthèse ≤ 30 lignes,
 - l'interdiction absolue de `git checkout` / `switch` / `stash` / `worktree` / `reset` / `pull`,
-- l'interdiction de poser une question : en cas de blocage, l'écrire dans le digest et rendre la
+- l'interdiction de poser une question : en cas de blocage, l'écrire dans le compte rendu et rendre la
   main.
 
 Si un sous-agent échoue ou rend une sortie vide, **ne pas le relancer une seconde fois** :
@@ -244,7 +247,7 @@ Passer ces valeurs aux paramètres `model` et `reasoning_effort` de l'outil `tas
   d'un autre poste ne doit jamais bloquer un ticket.
 
 **Le modèle de l'orchestrateur, lui, ne se force pas** : il dépend du `/model` de la session. C'est
-pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 0.
+pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 1.
 
 ## Commande
 
@@ -253,13 +256,42 @@ pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 0.
 `<ISSUE_KEY>` accepte aussi une URL complète (`https://jira.dedalus.com/browse/GSUPPORT-47944`) :
 extraire la clé de l'URL le cas échéant.
 
+### Résolution de l'ISSUE_KEY
+
+L'argument tapé après la commande **n'est pas transmis au skill** : il reste dans le message de
+l'utilisateur. Sans règle explicite, la clé est ignorée et redemandée alors qu'elle a déjà été
+fournie. La résoudre est donc la toute première action, avant toute question.
+
+Chercher, dans cet ordre, et s'arrêter au premier résultat :
+
+1. un motif `GSUPPORT-\d+` dans le **message qui a déclenché le skill** ;
+2. une URL `https://<domaine>/browse/GSUPPORT-\d+` dans ce même message → en extraire la clé ;
+3. un motif `GSUPPORT-\d+` dans les messages récents de la session (ticket en cours de discussion).
+
+Une fois résolue, la clé est **figée pour toute l'analyse** : ne plus jamais la redemander, y
+compris après une interruption pour `/allow-all`, et la rappeler dans chaque message qui attend une
+action de l'utilisateur.
+
 ---
 
-## Étape 0 — Permissions
+## Étape 0 — Valider la clé
+
+```
+Si aucune clé n'a pu être résolue, ou si ce qui a été fourni n'est pas au format
+GSUPPORT-<chiffres> (autre préfixe, numéro manquant, saisie libre) :
+  → demander via `ask_user` : « Quel ticket GSUPPORT veux-tu analyser ? (ex. GSUPPORT-47944) »
+  → accepter une clé nue ou une URL Jira, puis revalider
+  → si la nouvelle saisie est un ticket HORME-/ORBISBUG-, indiquer que ce skill traite
+    uniquement les GSUPPORT et rediriger vers /task-analyze, puis arrêter
+
+Sinon : passer directement à l'étape 1.
+```
+
+## Étape 1 — Permissions
 
 L'analyse enchaîne des dizaines d'appels `curl`, `git`, `grep` et d'écritures dans `/tmp`. Valider
-chaque demande une par une casse le rythme et fait perdre du temps. **Avant toute autre action**,
-poser la question une seule fois, via `ask_user` :
+chaque demande une par une casse le rythme et fait perdre du temps. Une fois la clé résolue et
+**avant toute exécution de commande**, poser la question une seule fois, via `ask_user` :
 
 ```
 Titre  : Autorisez-vous l'exécution sans confirmation ?
@@ -272,9 +304,11 @@ Choix  : - Oui, activer /allow-all pour cette session (recommandé)
 
 Selon la réponse :
 
-- **Oui** → répondre : « Tape `/allow-all` puis relance `/gsupport-analyze <ISSUE_KEY>`. »
-  et **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
-  interactive, seul l'utilisateur peut la taper.
+- **Oui** → répondre : « Tape `/allow-all`, je reprends ensuite sur `<ISSUE_KEY>`. » et
+  **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
+  interactive, seul l'utilisateur peut la taper. La clé reste connue : au message suivant,
+  reprendre directement à l'étape 2 **sans redemander le numéro de ticket** ni exiger de retaper
+  la commande.
 - **Non** → continuer normalement, en respectant strictement le tableau « Exécution autonome ».
 
 Ne jamais reposer la question pendant l'analyse.
@@ -307,37 +341,91 @@ de toute façon <agents.codeInvestigate.model>.
 Ne pas répéter l'avertissement pendant l'analyse, et le reporter en une ligne dans le rapport :
 la confiance d'une qualification dépend du modèle qui l'a produite.
 
-## Étape 1 — Valider la clé
+## Étape 1b — Pré-analyse de l'utilisateur — **optionnelle**
+
+L'utilisateur a souvent déjà regardé le ticket avant de lancer le skill : il sait que le bug est
+purement front Angular, ou qu'il vient du paramétrage. Sans cette information, l'étape 3 route à
+l'aveugle et l'étape 4 lance des agents sur des repos hors sujet — du temps et du contexte perdus,
+et du bruit dans le rapport.
+
+Poser la question **une seule fois**, via `ask_user`, tous les champs facultatifs. Proposer
+explicitement de passer : un utilisateur qui ne sait pas ne doit pas se sentir obligé d'inventer un
+périmètre, une mauvaise restriction est pire que pas de restriction du tout.
 
 ```
-Si <ISSUE_KEY> ne commence pas par "GSUPPORT-" :
-  → afficher "Préfixe inattendu. Ce skill traite uniquement les tickets GSUPPORT-XXXXX.
-     Pour HORME-/ORBISBUG-, utiliser /task-analyze."
-  → arrêter
+Titre  : As-tu déjà une piste sur ce ticket ?
+Texte  : Facultatif. Si tu sais déjà où se situe le problème, l'analyse évite de fouiller des
+         repos sans rapport. Laisse vide ou décline si tu préfères que le skill route seul.
+
+Champs :
+  - Couche concernée (multi-select, facultatif)
+      front Angular | front GWT legacy | back Java | API / REST | configuration PGD |
+      référentiel médicament | base de données | je ne sais pas
+  - Domaine métier (select, facultatif)      -> alimenté par `domains[].label` de config.json,
+                                                plus un choix « laisser le skill router »
+  - Repos à exclure (multi-select, facultatif) -> alimenté par `repositories[].name`
+  - Piste déjà identifiée (texte libre, facultatif)
+      ex. « erreur levée à la validation, seulement pour les lignes si besoin »
 ```
+
+Alimenter les listes depuis `config.json` — ne rien écrire en dur :
+
+```bash
+jq -r '.domains[].label'      "$SKILL_DIR/config.json"
+jq -r '.repositories[].name'  "$SKILL_DIR/config.json"
+```
+
+Exploitation des réponses :
+
+| Réponse | Effet |
+|---|---|
+| Couche concernée | restreint les `paths` transmis aux agents (étape 4) et écarte les repos sans rapport : « front Angular » seul → pas d'agent sur `orme-medication-legacy` ni `orme-global-repo` |
+| Domaine métier | court-circuite le routage 3.1 : le domaine est retenu d'office, ses `paths`, `i18nBundles` et `grepSeeds` sont utilisés tels quels |
+| Repos à exclure | aucun sous-agent n'est lancé sur ces repos |
+| Piste déjà identifiée | recopiée telle quelle dans le prompt des agents de l'étape 4 et dans le rapport |
+
+Trois garde-fous, sans lesquels cette étape dégraderait l'analyse au lieu de l'accélérer :
+
+1. **Formulaire décliné, vide ou « je ne sais pas » → comportement inchangé** : routage automatique
+   complet, aucun repo écarté. Ne pas insister, ne pas reposer la question.
+2. **La restriction est une indication forte, pas un mur.** Un agent qui ne trouve rien dans le
+   périmètre imposé le **signale** au lieu de conclure `Aucun code pertinent identifié.` :
+   l'orchestrateur peut alors proposer d'élargir. Une hypothèse de l'utilisateur reste une
+   hypothèse — le ticket peut la contredire.
+3. **La restriction est tracée dans le rapport** (`Périmètre restreint par l'utilisateur`). Une
+   conclusion tirée sur un périmètre réduit ne se lit pas comme une conclusion tirée sur l'ensemble.
+
+Si la collecte Jira (étape 2) contredit franchement la pré-analyse — le ticket décrit une erreur
+backend alors que l'utilisateur a annoncé « front Angular » —, le dire à l'étape 3 et proposer
+d'élargir plutôt que d'appliquer la restriction en silence.
 
 ## Étape 2 — Collecte Jira — **déléguée à un sous-agent**
 
 Ce bloc produit le gros du volume brut (JSON complet, commentaires, pièces jointes). Il est confié
-à **un seul sous-agent** de type `explore`, nommé `collecte-jira-<ISSUE_KEY>` et lancé avec le
+à **un seul sous-agent** de type `explore`, nommé `collecte-ticket-jira-<ISSUE_KEY>` et lancé avec le
 modèle `agents.jiraCollect` de `config.json`. Il écrit
-`/tmp/gsupport/<ISSUE_KEY>/digest-jira.md` et ne renvoie qu'une synthèse.
+`/tmp/gsupport/<ISSUE_KEY>/compte-rendu-jira.md` et ne renvoie qu'une synthèse.
 
 > **Pièces jointes et images** — le sous-agent doit pouvoir ouvrir des images avec l'outil `view`.
-> S'il n'en est pas capable, il l'écrit dans le digest (`images non exploitées par l'agent`) et
+> S'il n'en est pas capable, il l'écrit dans le compte rendu (`images non exploitées par l'agent`) et
 > l'orchestrateur les regarde lui-même après coup, sans relancer tout le bloc.
+
+> **Archives** — toute pièce jointe `.zip`/`.tar.gz`/`.7z`/`.rar` doit être décompressée et son
+> contenu lu fichier par fichier (voir 2.3.1). Le compte rendu doit lister les fichiers extraits ; une
+> archive restée fermée est un échec de l'étape 2.
 
 ### Prompt à fournir au sous-agent
 
 Y reprendre intégralement les sections 2.1 à 2.4 ci-dessous (elles sont le contrat de l'agent),
-plus les consignes communes, et exiger cette structure de digest :
+plus les consignes communes, et exiger cette structure de compte rendu :
 
 ```markdown
-# Digest Jira — <ISSUE_KEY>
+# Compte rendu Jira — <ISSUE_KEY>
 ## Champs        <tableau des champs standards et GSUPPORT>
 ## Symptôme      <description reformatée, scénario, résultat actuel/attendu, message d'erreur exact>
 ## Commentaires  <synthèse chronologique : auteur, date, apport>
-## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon>
+## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon
+ — pour une archive : la liste des fichiers extraits et l'apport de chacun>
 ## Liens         <tickets liés avec statut + résolution + apport de leur description ; liens externes>
 ## Pistes de recherche
 <les 3 à 8 chaînes de caractères exactes les plus discriminantes pour le `git grep` :
@@ -354,7 +442,7 @@ trois phrases, message d'erreur exact, pistes de recherche, et ce qui n'a pas pu
 
 ### Ce que l'orchestrateur en fait
 
-Lire la synthèse, puis ne relire dans `digest-jira.md` que les sections nécessaires à l'étape
+Lire la synthèse, puis ne relire dans `compte-rendu-jira.md` que les sections nécessaires à l'étape
 concernée. Ne jamais charger `issue.json` ni `comments.json` dans le contexte de l'orchestrateur :
 ils restent sur disque, à disposition d'un `jq` ciblé si un champ précis manque.
 
@@ -513,9 +601,58 @@ Puis exploiter selon le type :
   `Contenu non exploitable` si l'extraction échoue.
 - **PDF** → `pdftotext` s'il est installé, sinon signaler `Contenu non exploitable`.
 - **Logs / `.txt` / `.xml` / `.json`** → les lire, chercher les stacktraces et les codes d'erreur.
+- **Archives** (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.gz`, `.7z`, `.rar`) → **obligatoirement les
+  décompresser** et traiter chaque fichier extrait comme une pièce jointe à part entière
+  (voir 2.3.1). Une archive non ouverte = analyse incomplète.
 
 > Si une pièce jointe ne peut pas être lue, l'indiquer explicitement dans le rapport plutôt que
 > de l'ignorer silencieusement — une pièce jointe non lue est une information manquante.
+
+### 2.3.1 — Décompresser les archives (obligatoire)
+
+Les clients joignent très souvent un `.zip` contenant les logs applicatifs, des captures d'écran,
+des exports HL7/XML ou un document de reproduction. **Aucune archive ne doit rester fermée.**
+
+Extraire chaque archive dans un sous-dossier portant son nom, puis lister le contenu :
+
+```bash
+cd "/tmp/gsupport/<ISSUE_KEY>"
+for a in *.zip *.tar *.tar.gz *.tgz *.gz *.7z *.rar; do
+  [ -e "$a" ] || continue
+  dest="extracted/${a%%.*}"
+  mkdir -p "$dest"
+  case "$a" in
+    *.zip)            unzip -o -q "$a" -d "$dest" ;;
+    *.tar)            tar -xf "$a" -C "$dest" ;;
+    *.tar.gz|*.tgz)   tar -xzf "$a" -C "$dest" ;;
+    *.gz)             gunzip -c "$a" > "$dest/${a%.gz}" ;;
+    *.7z)             7z x -y -o"$dest" "$a" >/dev/null 2>&1 || echo "7z indisponible : $a" ;;
+    *.rar)            unrar x -o+ "$a" "$dest" >/dev/null 2>&1 || echo "unrar indisponible : $a" ;;
+  esac
+done
+find extracted -type f -printf '%s\t%p\n' | sort -rn
+```
+
+Règles :
+
+- **Récursivité** : si l'extraction produit elle-même une archive, la décompresser aussi
+  (relancer la boucle jusqu'à ce qu'il n'en reste plus). Limiter à 3 niveaux d'imbrication.
+- **Traiter chaque fichier extrait** selon son type avec les règles ci-dessus : images ouvertes
+  avec `view`, `.docx`/`.xlsx` extraits, logs lus.
+- **Gros fichiers de logs** : ne pas les lire intégralement. Chercher d'abord les occurrences
+  utiles autour de l'horodatage et des identifiants du ticket :
+
+  ```bash
+  grep -rniE "ERROR|SEVERE|Exception|Caused by|<CODE_ERREUR>|<ID_PATIENT>" \
+    /tmp/gsupport/<ISSUE_KEY>/extracted | head -100
+  ```
+
+  puis lire les blocs de contexte autour des hits pertinents (`grep -n -A 30`).
+- **Archive protégée par mot de passe ou outil manquant** (`7z`, `unrar`) : le signaler
+  explicitement dans le compte rendu et dans le rapport (`Archive non décompressée : <nom> — <raison>`),
+  ne jamais l'ignorer silencieusement.
+- Dans le rapport, chaque archive donne une entrée listant **les fichiers qu'elle contenait** et
+  ce que chacun apporte.
 
 ## 2.4 — Liens distants et issues liées
 
@@ -546,6 +683,10 @@ sous-agent ne sait pas faire. Elle produit le contexte exact que recevront les a
 **repo + branche résolue**.
 
 ### 3.1 — Choisir les repos
+
+**Partir de la pré-analyse (étape 1b) si elle a été renseignée** : un domaine imposé remplace le
+routage ci-dessous, une couche annoncée et des repos exclus retirent d'office des candidats. Ne
+réexécuter le routage complet que sur ce qui reste ouvert.
 
 #### Router par domaine métier
 
@@ -785,7 +926,7 @@ Chaque agent est lancé avec le modèle et le `reasoningEffort` de `agents.codeI
 le bloc qui demande le plus de raisonnement, et le seul où un modèle fort change réellement la
 qualité de la conclusion.
 
-Chaque agent écrit `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md` et ne renvoie qu'une synthèse
+Chaque agent écrit `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-code-<repo>.md` et ne renvoie qu'une synthèse
 de 30 lignes maximum.
 
 ### Prompt à fournir à chaque agent
@@ -798,12 +939,13 @@ cette étape interdit. Le prompt doit contenir :
 | Chemin absolu du repo et **branche résolue** (`origin/<branche>`) | il ne doit ni redeviner la branche ni toucher au working tree |
 | Version détectée du client | pour l'analyse de régression |
 | Symptôme en trois phrases + **message d'erreur exact** | son point d'entrée |
-| Les « Pistes de recherche » du `digest-jira.md` | les motifs `git grep` à essayer en premier |
+| Les « Pistes de recherche » du `compte-rendu-jira.md` | les motifs `git grep` à essayer en premier |
 | Les `grepSeeds`, `paths` et `i18nBundles` du domaine retenu | ses points de départ vérifiés dans ce repo |
 | Le champ `i18nHint` de `config.json` | où chercher un libellé client (étape 4.1) |
 | Scénario de reproduction résumé | pour confronter la règle trouvée au cas client |
 | La chaîne de recherche 4.1 → 4.6 et les consignes de recherche ci-dessous | sa méthode |
 | Le rôle du repo (`description` de `config.json`) | pour cadrer son périmètre |
+| La **pré-analyse de l'utilisateur** (étape 1b), si renseignée : couche, piste | l'oriente d'emblée ; préciser que c'est une hypothèse à confirmer, pas une consigne, et qu'il doit **signaler** s'il ne trouve rien dans ce périmètre plutôt que de conclure à l'absence de code pertinent |
 
 Récupérer les éléments du domaine pour un repo donné :
 
@@ -828,10 +970,10 @@ Y ajouter les consignes communes, et en particulier l'interdiction stricte de to
 modifiant le repo (`checkout`, `switch`, `stash`, `worktree`, `reset`, `pull`) : ces repos sont
 ceux de l'utilisateur, avec du travail en cours dessus.
 
-### Structure du digest attendu
+### Structure du compte rendu attendu
 
 ```markdown
-# Digest code — <repo> @ origin/<branche>
+# Compte rendu code — <repo> @ origin/<branche>
 ## Chaîne de raisonnement   <message d'erreur → front → REST → métier → données>
 ## Fichiers retenus         <une section par fichier : chemin:lignes, rôle, extrait 10–30 lignes>
 ## Condition exacte qui produit le symptôme
@@ -845,7 +987,7 @@ essayés : une recherche infructueuse documentée vaut mieux qu'un silence.
 
 ### Ce que l'orchestrateur en fait
 
-Il collecte les synthèses, puis **relit les digests fichier par fichier au moment de rédiger
+Il collecte les synthèses, puis **relit les comptes rendus fichier par fichier au moment de rédiger
 l'étape 9**. Un verdict de repo qui contredit un autre est un signal fort : le dire dans la
 qualification plutôt que de trancher en silence.
 
@@ -913,7 +1055,7 @@ Pour chaque fichier retenu : repo, chemin, plage de lignes, extrait (10–30 lig
 explication de son rôle dans le symptôme. Restituer le résultat comme une **chaîne de raisonnement
 traçable** (message d'erreur → front → REST → service → données), pas comme une liste de fichiers.
 
-Cette restitution va dans le **digest du repo**, pas dans la réponse de l'agent.
+Cette restitution va dans le **compte rendu du repo**, pas dans la réponse de l'agent.
 
 Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser les repos fouillés.
 
@@ -922,13 +1064,13 @@ Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser 
 C'est la section centrale du skill et sa raison d'être : décider **ce qu'est** la demande avant
 de décider quoi en faire.
 
-Elle s'appuie sur les digests produits aux étapes 2 et 4. Avant de trancher, relire les sections
-utiles : `## Symptôme` et `## Commentaires` du `digest-jira.md`, et `## Verdict du repo` de chaque
-`digest-code-<repo>.md`.
+Elle s'appuie sur les comptes rendus produits aux étapes 2 et 4. Avant de trancher, relire les sections
+utiles : `## Symptôme` et `## Commentaires` du `compte-rendu-jira.md`, et `## Verdict du repo` de chaque
+`compte-rendu-code-<repo>.md`.
 
 Deux réflexes propres au mode délégué :
 
-- **Un digest muet n'est pas une preuve d'absence.** Si un agent a rendu `Aucun code pertinent
+- **Un compte rendu muet n'est pas une preuve d'absence.** Si un agent a rendu `Aucun code pertinent
   identifié.`, regarder ses `## Pistes non concluantes` : cherchait-il les bons motifs ? Si le
   message d'erreur exact n'y figure pas, la recherche était mal amorcée — le refaire soi-même sur
   ce motif avant de conclure.
@@ -998,10 +1140,10 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 REPORT_DIR="${REPO_ROOT}/$(jq -r '.reportDir // ".copilot/analyses"' "$SKILL_DIR/config.json")"
 mkdir -p "$REPORT_DIR"
 
-REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT.md"
+REPORT="${REPORT_DIR}/<ISSUE_KEY>-analyse.md"
 n=2
 while [ -e "$REPORT" ]; do
-  REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT-${n}.md"
+  REPORT="${REPORT_DIR}/<ISSUE_KEY>-analyse-${n}.md"
   n=$((n + 1))
 done
 echo "$REPORT"
@@ -1083,6 +1225,7 @@ Même contenu dans le fichier et dans le chat.
 <pour chaque pièce jointe : nom, type, auteur, date, et ce qu'elle apporte>
 <pour les images : description de ce qui est visible>
 <pour les documents : extrait utile>
+<pour les archives : liste des fichiers extraits et apport de chacun>
 <ou "Aucune pièce jointe.">
 
 ## Liens
@@ -1103,6 +1246,8 @@ Même contenu dans le fichier et dans le chat.
 
 **Repos requis manquants** : <liste + commande `git clone`, ou "aucun">
 **Non vérifié faute de repo** : <ce qui n'a pas pu être confirmé, ou "rien">
+**Périmètre restreint par l'utilisateur** : <couche / domaine / repos exclus / piste fournie à
+l'étape 1b, ou "non — routage automatique complet">
 
 ### Chaîne de raisonnement
 1. Point de départ : <message d'erreur / écran / libellé>
@@ -1181,8 +1326,8 @@ code `<agents.codeInvestigate.model>`
 <mention si un modèle configuré n'était pas disponible et a été remplacé par le modèle par défaut>
 
 Digests de collecte (non versionnés, effacés au redémarrage) :
-- `/tmp/gsupport/<ISSUE_KEY>/digest-jira.md`
-- `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md`
+- `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-jira.md`
+- `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-code-<repo>.md`
 ```
 
 ---
@@ -1195,7 +1340,66 @@ Digests de collecte (non versionnés, effacés au redémarrage) :
 | Ticket introuvable | `Ticket <KEY> introuvable sur ${JIRA_DOMAIN}` |
 | Token absent | `Configurer JIRA_API_TOKEN dans ~/.bashrc` |
 | Pièce jointe illisible | `Contenu non exploitable` (et le signaler dans le rapport) |
+| Archive non décompressable (mot de passe, `7z`/`unrar` absent) | `Archive non décompressée : <nom> — <raison>` (et le signaler dans le rapport) |
 | Aucun commentaire | `Aucun commentaire.` |
 | Aucune piste dans le code | `Aucun code pertinent identifié.` |
 | Écriture du rapport impossible | `Impossible de sauvegarder le rapport : <erreur>` |
 | Sous-agent en échec ou sortie vide | Exécuter le bloc soi-même, sans relancer l'agent, et l'indiquer dans le rapport |
+
+---
+
+## Maintenir la documentation d'architecture
+
+`ARCHITECTURE.md` est la vue d'ensemble du skill : c'est par lui que l'équipe comprend le
+découpage orchestrateur / sous-agents. Une doc qui diverge du skill est pire que pas de doc —
+elle fait raisonner sur un fonctionnement qui n'existe plus.
+
+**Règle : toute modification de `SKILL.md` ou de la structure de `config.json` doit être
+accompagnée de la mise à jour de `ARCHITECTURE.md` dans le même commit.**
+
+Cela vaut aussi bien pour une modification humaine que pour une modification faite par un agent :
+si l'agent édite le skill, il met à jour `ARCHITECTURE.md` avant de rendre la main, sans attendre
+qu'on le lui demande.
+
+### Quel changement impacte quel schéma
+
+| Changement dans le skill | À répercuter dans `ARCHITECTURE.md` |
+|---|---|
+| Ajout, suppression ou renumérotation d'une étape | § 2 flowchart global, § 3 tableau « qui fait quoi » |
+| Un bloc passe de l'orchestrateur à un sous-agent (ou l'inverse) | § 2, § 3, et la liste « ne se délègue jamais » |
+| Nouveau fichier écrit dans `/tmp/gsupport/<KEY>/` | § 4 passage par fichiers |
+| Nouveau type de pièce jointe ou nouvelle règle d'extraction | § 5 aiguillage des pièces jointes |
+| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 6 (texte et exemples de vocabulaire, pas un schéma) |
+| Nouvelle catégorie de qualification ou nouveau garde-fou | § 7 |
+| Nouveau cas d'erreur ou de reprise | § 8 tableau de reprise sur incident |
+| Nouvelle clé structurante dans `config.json` | § 9 « ce qu'il faut entretenir », et § 2 si elle alimente une étape |
+
+Ajouter une simple précision de rédaction dans une étape existante ne demande pas de toucher aux
+schémas. Le déclencheur, c'est le **flux** : qui exécute quoi, dans quel ordre, avec quelles
+entrées et quelles sorties.
+
+### Vérifier les diagrammes avant de committer
+
+Un diagramme Mermaid invalide ne s'affiche pas sur GitHub, il ne casse rien d'autre — donc
+personne ne le remarque. Les valider explicitement :
+
+```bash
+cd skills/gsupport-analyze
+rm -rf /tmp/mmd && mkdir -p /tmp/mmd
+
+python3 - <<'PY'
+import re, pathlib
+src = pathlib.Path("ARCHITECTURE.md").read_text()
+for i, block in enumerate(re.findall(r"```mermaid\n(.*?)```", src, re.S)):
+    pathlib.Path(f"/tmp/mmd/d{i}.mmd").write_text(block)
+PY
+
+for f in /tmp/mmd/*.mmd; do
+  npx -y @mermaid-js/mermaid-cli@11 -i "$f" -o "${f%.mmd}.svg" >/dev/null 2>&1 \
+    || echo "Diagramme invalide : $f"
+done
+rm -rf /tmp/mmd
+```
+
+Enfin, si le changement modifie ce que le skill fait **pour l'utilisateur** (et pas seulement
+comment il le fait), mettre aussi à jour la ligne du skill dans `skills/README.md`.
