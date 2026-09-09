@@ -82,9 +82,13 @@ jq -r '.excludedRepositories[] | "\(.name)\t\(.reason)"' "$SKILL_DIR/config.json
 
 Un repo portant `optIn: true` est un cas intermédiaire : il **n'est jamais retenu par le routage
 par défaut**, mais reste mobilisable quand son `optInCondition` est remplie — l'analyse désigne
-explicitement son périmètre, ou l'utilisateur l'a demandé à l'étape 1b. C'est le cas de
-`orme-pgd-config` : il n'a rien d'un repo de prescription, mais reste la seule source de vérité
-quand l'hypothèse retenue est un problème de paramétrage client.
+explicitement son périmètre, ou l'utilisateur l'a demandé à l'étape 1b. Deux repos sont dans ce
+cas :
+
+- `orme-pgd-config` : il n'a rien d'un repo de prescription, mais reste la seule source de vérité
+  quand l'hypothèse retenue est un problème de paramétrage client ;
+- `orme-common` : à ne fouiller qu'en **second passage**, quand un module fonctionnel n'a pas
+  retrouvé le libellé, la clé i18n ou la règle cherchée (voir « Second passage » à l'étape 4).
 
 ```bash
 jq -r '.repositories[] | select(.optIn == true) | "\(.name)\t\(.optInCondition)"' \
@@ -92,8 +96,9 @@ jq -r '.repositories[] | select(.optIn == true) | "\(.name)\t\(.optInCondition)"
 ```
 
 Le retenir sans que sa condition soit remplie fait perdre un sous-agent sur du code hors sujet ;
-l'oublier alors qu'elle l'est fait conclure « bug » sur ce qui n'est qu'une configuration. Dans les
-deux cas, l'indiquer dans le tableau des repos du rapport (`opt-in : retenu / non retenu`).
+l'oublier alors qu'elle l'est fait conclure « bug » sur ce qui n'est qu'une configuration, ou
+`Aucun code pertinent identifié.` sur un libellé qui se trouvait simplement ailleurs. Dans les deux
+cas, l'indiquer dans le tableau des repos du rapport (`opt-in : retenu / non retenu`).
 
 ```bash
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
@@ -1039,6 +1044,26 @@ Il collecte les synthèses, puis **relit les comptes rendus fichier par fichier 
 l'étape 9**. Un verdict de repo qui contredit un autre est un signal fort : le dire dans la
 qualification plutôt que de trancher en silence.
 
+### Second passage — les repos `optIn`
+
+Les repos `optIn` ne sont pas lancés avec la première vague. C'est l'issue de cette vague qui
+décide de les réveiller, avant de passer à la qualification :
+
+| Constat dans les comptes rendus de la première vague | Second passage |
+|---|---|
+| Le libellé client, la clé i18n ou la règle n'a pas été retrouvé dans le module fonctionnel | agent sur `orme-common` (bundles partagés `backend/legacy/shared`, briques transverses) |
+| La chaîne de raisonnement aboutit à un paramètre client, un droit ou un profil | agent sur `orme-pgd-config` |
+
+Ce second passage suit exactement les mêmes règles que le premier : même nommage
+(`investigation-code-<repo>`), même modèle `agents.codeInvestigate`, même compte rendu
+`compte-rendu-code-<repo>.md`. Lui transmettre en plus les **`## Pistes non concluantes`** des
+agents de la première vague : c'est précisément ce qu'il ne faut pas rechercher une seconde fois.
+
+Ne pas déclencher de second passage quand la première vague a déjà établi une chaîne complète —
+il n'apporterait rien et retarderait la qualification. À l'inverse, conclure
+`Aucun code pertinent identifié.` sans avoir tenté `orme-common` alors que le libellé restait
+introuvable est une erreur d'analyse : le rapport doit alors le dire explicitement.
+
 ### Chaîne de recherche
 
 Suivre cet ordre : chaque étape fournit le point d'entrée de la suivante. Ne pas sauter d'étape,
@@ -1053,6 +1078,11 @@ Où chercher exactement dépend du produit : suivre le champ `i18nHint` de `conf
 `i18nBundles` du domaine plutôt que de supposer un emplacement. Sur ORME aujourd'hui, les libellés
 affichés par le front Angular viennent des `.properties` du **backend** — chercher un `fr.json`
 Angular ne donnerait rien.
+
+Un libellé introuvable dans le repo confié à l'agent n'est **pas** une impasse : il vit peut-être
+dans les bundles partagés de `orme-common`. L'agent l'écrit noir sur blanc dans son
+`## Verdict du repo` (`libellé "<texte>" absent de ce repo`) et rend la main — c'est ce constat qui
+déclenche le second passage côté orchestrateur.
 
 **4.2 — Écran / composant front**
 Si un écran est identifié : localiser le composant Angular (ou GWT) qui l'affiche, son template

@@ -47,11 +47,18 @@ flowchart TD
         A4C["investigation-code-repo-C"]
     end
 
+    subgraph SUB4B["Étape 4 — second passage, repos optIn"]
+        A4D["investigation-code-orme-common<br/>ou orme-pgd-config"]
+    end
+
     E0 --> E1 --> E1B --> A2
     A2 -->|compte-rendu-jira.md| E3
     E3 --> A4A & A4B & A4C
     A4A & A4B & A4C -->|compte-rendu-code-repo.md| E5
     E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
+
+    A4A & A4B & A4C -.->|libellé ou règle introuvable,<br/>piste de paramétrage| A4D
+    A4D -.->|compte-rendu-code-repo.md| E5
 
     CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
     E1B -.->|périmètre imposé : repos écartés| E3
@@ -70,6 +77,7 @@ flowchart TD
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `compte-rendu-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `compte-rendu-code-<repo>.md` |
+| Étape 4 — second passage sur les repos `optIn`, si la première vague le justifie | idem, déclenché par l'orchestrateur | `compte-rendu-code-<repo>.md` |
 | Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<KEY>-analyse.md` |
 
 Ne se délègue **jamais** :

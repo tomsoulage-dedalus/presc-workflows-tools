@@ -388,7 +388,9 @@
       "name": "orme-common",
       "path": "orme-common",
       "url": "git@github.com:dedalus-cis4u/orme-common.git",
-      "description": "Briques transverses ORME — back Java, front Angular, resources partagees (dont i18n communs). A chercher quand un libelle ou une regle n'est pas trouve dans le module fonctionnel."
+      "optIn": true,
+      "optInCondition": "Ne fouiller qu'en second passage : quand un agent d'un module fonctionnel a rendu son compte rendu sans retrouver le libelle, la cle i18n ou la regle cherchee, ou si l'utilisateur le demande a l'etape 1b. Ne jamais le retenir d'emblee en meme temps que le module fonctionnel.",
+      "description": "Briques transverses ORME — back Java, front Angular, resources partagees (dont i18n communs, backend/legacy/shared). A chercher quand un libelle ou une regle n'est pas trouve dans le module fonctionnel."
     },
     {
       "name": "orme-medication-legacy",
