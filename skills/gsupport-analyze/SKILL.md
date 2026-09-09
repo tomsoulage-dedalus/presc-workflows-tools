@@ -119,9 +119,15 @@ jamais le lire en entier.
 |---|---|
 | Appels Jira en lecture (`curl` GET) | Écriture sur un fichier existant |
 | Téléchargement des pièces jointes dans `/tmp` | Suppression de fichiers |
-| `grep`, `glob`, `view`, lecture de fichiers | Toute commande git modifiant l'état du dépôt |
+| `grep`, `glob`, `view`, lecture de fichiers | Utiliser une branche autre que celle de la version |
 | Extraction d'archives dans `/tmp` | Installation de paquets |
-| Création du dossier de rapport et écriture d'un **nouveau** fichier | Commit / push |
+| `git grep`, `git show`, `git log`, `git ls-tree`, `git rev-parse` sur `origin/<branche>` | Commit / push |
+| `git fetch origin` (met à jour les refs distantes uniquement) | |
+| Création du dossier de rapport et écriture d'un **nouveau** fichier | |
+
+**Interdit** dans les repos de l'utilisateur, même avec son accord : `git checkout`, `git switch`,
+`git stash`, `git worktree`, `git reset`, `git pull`, ou toute commande modifiant la branche
+courante, le working tree ou les stashes. Tout est faisable en lecture seule sur `origin/<branche>`.
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 
@@ -352,11 +358,89 @@ correspondant.
 Si la version détectée est absente ou illisible, se rabattre sur `orme-medication-legacy`
 (cas le plus courant aujourd'hui) et le signaler explicitement comme une hypothèse.
 
+### 6.0.bis — Se placer sur la branche de la version, sans rien casser
+
+**Ne jamais chercher dans les fichiers du disque.** Les repos locaux sont sur des branches
+quelconques (ticket en cours, migration, version différente de celle du client) et peuvent porter
+du travail non commité. Chercher dedans produirait une analyse du mauvais code, donc une
+qualification fausse.
+
+**Ne jamais faire de `git checkout`, `git switch`, `git stash` ni `git worktree`** dans les repos
+de l'utilisateur. La recherche se fait **directement sur les références distantes**, en lecture
+seule : branche courante, `HEAD`, stashes et fichiers modifiés restent intacts.
+
+```bash
+git -C "$REPO" grep -n "<motif>" "origin/<branche>" -- '<filtre>'   # rechercher
+git -C "$REPO" show "origin/<branche>:<chemin>"                     # lire un fichier
+git -C "$REPO" ls-tree -r --name-only "origin/<branche>"            # lister les fichiers
+git -C "$REPO" log -S "<motif>" "origin/<branche>" -- '<chemin>'    # tracer une regression
+```
+
+#### Résoudre la branche depuis la version
+
+Les branches de version suivent le motif `<clé>/develop`, où la clé encode la version sur 7
+chiffres (`major` 1 + `minor` 2 + `patch` 2 + `build` 2), `X` servant de joker :
+`03.17.09.02` → `3170902` → `317XXXX/develop`.
+
+Retenir la branche **la plus spécifique** qui correspond (une clé exacte prime sur un joker) :
+
+```bash
+pick_branch() {
+  local repo="$1" version="$2" key best="" pat re xs bxs
+  key=$(echo "$version" \
+        | grep -oE '[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}|[0-9]+\.[0-9]+' \
+        | head -1 | tr -d '.' | sed 's/^0//')
+  while read -r b; do
+    pat="${b%%/develop}"; pat="${pat#origin/}"
+    case "$pat" in (*[!0-9X]*|"") continue;; esac
+    re="^${pat//X/[0-9]}$"
+    if [[ "$key" =~ $re ]]; then
+      xs=${pat//[!X]/}; bxs=${best//[!X]/}
+      { [ -z "$best" ] || [ ${#xs} -lt ${#bxs} ]; } && best="$pat"
+    fi
+  done < <(git -C "$repo" branch -r | grep -E '/develop$' | tr -d ' ')
+  echo "$best"
+}
+```
+
+Correspondances validées : `03.17.09.02` → `317XXXX`, `03.21.02.05` → `32102XX`,
+`03.21.00.01` → `3210001` (exacte, préférée à `32100XX`).
+
+#### Rafraîchir les références
+
+Avant de résoudre la branche, mettre à jour les refs distantes du repo. `fetch` ne touche ni la
+branche courante, ni le working tree, ni les stashes :
+
+```bash
+git -C "$REPO" fetch --quiet origin
+```
+
+#### Branche absente
+
+Vérifier l'existence avant toute recherche :
+
+```bash
+git -C "$REPO" rev-parse --verify -q "origin/<branche>" >/dev/null || echo "ABSENTE"
+```
+
+Si la branche de la version n'existe pas dans un repo, c'est souvent **normal** : la règle 3.22
+veut que `orme-medication-legacy` n'ait pas de branche 3.17, et inversement. Dans ce cas :
+
+1. Ne pas se rabattre silencieusement sur `main/develop` — le code y est plus récent que celui du
+   client et mènerait à une conclusion erronée.
+2. Le signaler, proposer la branche existante la plus proche, et **demander confirmation** avant
+   de l'utiliser.
+3. Si l'utilisateur refuse, exclure ce repo et l'indiquer dans le rapport.
+
+#### Tracer
+
+Le rapport doit indiquer, **pour chaque repo fouillé, la branche réellement analysée**, ainsi que
+la version dont elle découle. Sans cette information, une conclusion n'est pas vérifiable.
+
 ### Chaîne de recherche
 
 Suivre cet ordre : chaque étape fournit le point d'entrée de la suivante. Ne pas sauter d'étape,
 ne pas partir en recherche large.
-
 **6.1 — Message d'erreur et libellés**
 Point d'entrée le plus efficace : le **texte exact** remonté par le client (description,
 commentaire, ou capture d'écran). Le chercher dans les bundles i18n / `resources/` pour retrouver
@@ -385,17 +469,25 @@ oriente fortement vers « comportement attendu ».
 
 ### Consignes de recherche
 
-- `grep` sur des motifs ciblés, jamais de recherche large ; limiter les résultats (`head_limit`).
-- `glob` pour trouver les fichiers par nom, puis `view` avec `view_range` sur la zone utile.
+- Toutes les recherches passent par `git grep` / `git show` sur `origin/<branche>` — **jamais** par
+  une lecture directe des fichiers du disque, qui reflètent une autre branche.
+- Motifs ciblés, jamais de recherche large ; limiter les résultats (`head_limit`).
+- `git ls-tree -r --name-only origin/<branche>` pour trouver les fichiers par nom, puis
+  `git show origin/<branche>:<chemin>` pour lire la zone utile.
 - Java : `.java` (classes, méthodes, annotations) · Angular : `.ts`, `.html` · SQL : `.sql` ·
-  config : `.properties`, `.yml`, `.json`.
+  config : `.properties`, `.yml`, `.json` — via le filtre `-- '<motif>'` de `git grep`.
 
 ### Version et régression
 
 Vérifier la **version détectée** (`[G] Detected in Version`) : la règle en cause existe-t-elle déjà
-dans cette version, ou a-t-elle été introduite / corrigée depuis ? Le client parle souvent de
-« régression » — le confirmer ou l'infirmer avec l'historique git (`git log -S`, `git log` sur le
-fichier fautif).
+sur la branche de cette version, ou a-t-elle été introduite / corrigée depuis ? Le client parle
+souvent de « régression » — le confirmer ou l'infirmer en comparant la branche de sa version à une
+branche plus ancienne :
+
+```bash
+git -C "$REPO" log -S "<motif>" --oneline "origin/<branche>" -- '<chemin>'
+git -C "$REPO" diff "origin/<branche ancienne>" "origin/<branche client>" -- '<chemin>'
+```
 
 ### Restitution
 
@@ -566,7 +658,11 @@ Même contenu dans le fichier et dans le chat.
 
 ## Investigation du code
 
-**Repos fouillés** : <liste + justification en une ligne>
+**Version de référence** : <[G] Detected in Version> → clé `<clé>`
+
+| Repo | Branche analysée | Remarque |
+|---|---|---|
+| <repo> | `origin/<branche>` | <exacte / plus proche confirmée / exclu> |
 
 ### Chaîne de raisonnement
 1. Point de départ : <message d'erreur / écran / libellé>
@@ -575,7 +671,7 @@ Même contenu dans le fichier et dans le chat.
 4. Métier : <service + condition qui lève l'erreur>
 5. Données / configuration : <...>
 
-### <repo> — <chemin/du/fichier>:<lignes>
+### <repo> `origin/<branche>` — <chemin/du/fichier>:<lignes>
 Rôle : <...>
 
 ```<langage>
@@ -583,9 +679,11 @@ Rôle : <...>
 ```
 
 ### Version et régression
-<la règle existe-t-elle dans la version détectée ? confirmation ou infirmation de la régression>
+<la règle existe-t-elle sur la branche de la version détectée ? comparaison avec une branche
+antérieure, confirmation ou infirmation de la régression>
 
-<ou "Aucun code pertinent identifié." + repos fouillés>
+<ou "Aucun code pertinent identifié." + repos et branches fouillés>
+<ou "Investigation du code non réalisée : repos non disponibles">
 
 ## Qualification
 
