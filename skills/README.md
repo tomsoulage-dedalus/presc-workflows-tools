@@ -26,6 +26,7 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 |--------------------|---|---|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
 | **task-start**     | `/task-start <TICKET>` | `main` / `develop` | Branche + analyse en une seule commande                                    | Crée la branche depuis un ticket Jira et lance l'analyse                                                                                      |
 | **task-analyze**   | `/task-analyze <TICKET>` | n'importe quelle branche | Plan structuré avant de coder, évite les mauvaises pistes                  | Analyse un ticket Jira, investigue le code, génère un `ANALYZE.md`                                                                            |
+| **gsupport-analyze** | `/gsupport-analyze <GSUPPORT-XXXXX>` | n'importe quelle branche | Qualifie un ticket client avant d'ouvrir un ORBISBUG inutile | Analyse un ticket client GSUPPORT : lit **tous** les commentaires et **toutes** les pièces jointes, investigue le code, qualifie la nature du problème et génère un `<KEY>-GSUPPORT.md` |
 | **task-implement** | `/task-implement` | branche de la tâche | Faire `/clear` avant — le contexte est dans `ANALYZE.md`                   | Implémente le code (🟠 Java/Jakarta EE back et/ou 🔵 Angular front) en s'appuyant sur les règles du projet et les leçons passées              |
 | **test-check**     | `/test-check` | branche de la tâche | Détecte les régressions avant la PR, évite les surprises en CI             | Vérifie que les changements n'ont pas cassé de tests existants (🔵 Angular + 🟠 Java) — appelle `/test-implement` si des tests échouent       |
 | **test-implement** | `/test-implement` | branche de la tâche | Génère le boilerplate des tests manquants automatiquement                  | Écrit et corrige les tests (🔵 specs Angular + 🟠 tests JUnit) pour les fichiers sans couverture et les tests en échec                        |
@@ -50,6 +51,17 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 /task-analyze ORBIS-1234
 ```
 > Lit le ticket Jira, explore les fichiers impactés, propose des hypothèses d'implémentation et génère un `ANALYZE.md` local avec le plan de travail.
+
+---
+
+### `/gsupport-analyze`
+```
+/gsupport-analyze GSUPPORT-47944
+/gsupport-analyze https://jira.dedalus.com/browse/GSUPPORT-47944
+```
+> Analyse une remontée **client**. Lit le ticket, **tous** les commentaires et **toutes** les pièces jointes (captures, scénarios `.docx` et leurs images embarquées), investigue le code à partir du message d'erreur, puis **qualifie** la demande : bug dans notre code, problème de configuration/données, comportement attendu, évolution, ou informations insuffisantes. Génère `.copilot/analyses/<KEY>-GSUPPORT.md` avec les hypothèses, les questions à poser au client et un brouillon de réponse support.
+>
+> C'est l'étape **amont** de `/task-analyze` : elle décide si un `ORBISBUG` ou un `HORME` doit être créé.
 
 ---
 
