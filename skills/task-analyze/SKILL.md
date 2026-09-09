@@ -1,5 +1,6 @@
 ---
 name: "task-analyze"
+argument-hint: "[HORME-XXXX | ORBISBUG-XXXX]"
 description: "Jira analysis: reads a ticket, fetches linked docs and issues, investigates the codebase, proposes fix hypotheses, and saves an ANALYZE.md — without creating any branch or PR"
 ---
 
@@ -15,6 +16,36 @@ The user must have these environment variables configured:
 > Variables are defined in `~/.bashrc`. **Always run `source ~/.bashrc`** before any action to load them.
 
 ## Available commands
+
+### Resolving `<ISSUE_KEY>`
+
+The argument typed after a slash command **is not transmitted to the skill**: the CLI injects a
+fixed message (`The user explicitly invoked the "<name>" skill. Follow its instructions now.`)
+that carries only the skill name. `argument-hint` merely displays a placeholder in the
+autocomplete, it does not carry the value either. Resolving the key is therefore the very first
+action, before any question.
+
+Look in this order, stopping at the first hit:
+
+1. a `HORME-\d+` / `ORBISBUG-\d+` pattern in the **message that triggered the skill**;
+2. a `https://<domain>/browse/<KEY>` URL in that same message → extract the key;
+3. the **CLI input history**, which keeps the raw line that was actually typed, most recent first:
+
+   ```bash
+   jq -r '.commandHistory[]' ~/.copilot/command-history-state.json 2>/dev/null \
+     | grep -m1 -E '^/task-analyze[[:space:]]' \
+     | grep -oE '(HORME|ORBISBUG)-[0-9]+'
+   ```
+
+   Never widen this `grep` to the whole history: a key from a previous ticket would be picked up
+   by mistake.
+4. a `HORME-\d+` / `ORBISBUG-\d+` pattern in recent session messages.
+
+A key coming from source 3 or 4 was not read directly from the request: announce it in one line
+(*"Analysing `ORBISBUG-52064` (key taken from your command)."*) so the user can correct it right
+away. Only if every source fails, ask which ticket to analyse.
+
+Once resolved, the key is **frozen for the whole analysis** — never ask for it again.
 
 ### `/task-analyze <ISSUE_KEY>`
 Full analysis workflow:

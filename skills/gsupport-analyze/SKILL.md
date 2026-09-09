@@ -1,5 +1,6 @@
 ---
 name: "gsupport-analyze"
+argument-hint: "[GSUPPORT-KEY]"
 description: "Analyse d'un ticket client GSUPPORT : lit le ticket, tous les commentaires et toutes les pièces jointes, investigue le code, qualifie la nature du problème (bug / config / comportement attendu / évolution) et sauvegarde un rapport <ISSUE_KEY>-analyse.md — sans créer de branche ni de PR"
 ---
 
@@ -150,8 +151,8 @@ courante, le working tree ou les stashes. Tout est faisable en lecture seule sur
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 
-Si l'utilisateur a accepté `/allow-all` à l'étape 1, ce tableau reste la règle de conduite : les
-opérations de la colonne de droite continuent d'être annoncées et validées explicitement.
+Si `/allow-all` est actif, ce tableau reste la règle de conduite : les opérations de la colonne de
+droite continuent d'être annoncées et validées explicitement.
 
 ## Architecture d'exécution — orchestrateur et sous-agents
 
@@ -165,7 +166,7 @@ chez l'orchestrateur.
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
+| Étapes 0, 1, 1b — résolution et validation de la clé, conseil de permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `compte-rendu-jira.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `compte-rendu-code-<repo>.md` |
@@ -184,7 +185,7 @@ Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice
 
 ### Ce qui ne se délègue jamais
 
-- Toute question à l'utilisateur (`ask_user`) : permissions, pré-analyse (étape 1b), `reposDir`
+- Toute question à l'utilisateur (`ask_user`) : pré-analyse (étape 1b), `reposDir`
   introuvable, repo requis manquant, branche approchante à confirmer. Un sous-agent ne peut pas
   dialoguer.
 - La **qualification** (étape 5) : elle croise Jira, code et contradictions entre commentaires.
@@ -258,19 +259,38 @@ extraire la clé de l'URL le cas échéant.
 
 ### Résolution de l'ISSUE_KEY
 
-L'argument tapé après la commande **n'est pas transmis au skill** : il reste dans le message de
-l'utilisateur. Sans règle explicite, la clé est ignorée et redemandée alors qu'elle a déjà été
-fournie. La résoudre est donc la toute première action, avant toute question.
+L'argument tapé après la commande **n'est pas transmis au skill**. Le CLI injecte un message
+figé — `The user explicitly invoked the "<nom>" skill. Follow its instructions now.` — qui ne
+porte que le nom du skill. Le `argument-hint` du frontmatter n'affiche qu'un repère de saisie
+dans l'autocomplétion : il ne transporte pas la valeur non plus. Sans règle explicite, la clé
+est donc redemandée alors qu'elle a déjà été fournie. La résoudre est la toute première action,
+avant toute question.
 
 Chercher, dans cet ordre, et s'arrêter au premier résultat :
 
-1. un motif `GSUPPORT-\d+` dans le **message qui a déclenché le skill** ;
+1. un motif `GSUPPORT-\d+` dans le **message qui a déclenché le skill** (présent quand
+   l'utilisateur a écrit une phrase libre plutôt qu'une slash-command) ;
 2. une URL `https://<domaine>/browse/GSUPPORT-\d+` dans ce même message → en extraire la clé ;
-3. un motif `GSUPPORT-\d+` dans les messages récents de la session (ticket en cours de discussion).
+3. **l'historique de saisie du CLI** — c'est lui qui rattrape le cas de la slash-command, car il
+   conserve la ligne brute réellement tapée, la plus récente en tête :
 
-Une fois résolue, la clé est **figée pour toute l'analyse** : ne plus jamais la redemander, y
-compris après une interruption pour `/allow-all`, et la rappeler dans chaque message qui attend une
-action de l'utilisateur.
+   ```bash
+   jq -r '.commandHistory[]' ~/.copilot/command-history-state.json 2>/dev/null \
+     | grep -m1 -E '^/gsupport-analyze[[:space:]]' \
+     | grep -oE 'GSUPPORT-[0-9]+'
+   ```
+
+   Si la commande a été lancée sans argument, cette ligne ne renvoie rien : passer au point 4.
+   Ne **jamais** élargir le `grep` à tout l'historique, une clé d'un ticket précédent serait
+   reprise à tort.
+4. un motif `GSUPPORT-\d+` dans les messages récents de la session (ticket en cours de discussion).
+
+Une clé issue du point 3 ou 4 n'a pas été lue directement dans la demande : l'annoncer en une
+ligne avant de démarrer — *« Analyse de `GSUPPORT-40380` (clé reprise de ta commande). »* — pour
+que l'utilisateur puisse corriger immédiatement.
+
+Une fois résolue, la clé est **figée pour toute l'analyse** : ne plus jamais la redemander, et la
+rappeler dans chaque message qui attend une action de l'utilisateur.
 
 ---
 
@@ -287,33 +307,29 @@ GSUPPORT-<chiffres> (autre préfixe, numéro manquant, saisie libre) :
 Sinon : passer directement à l'étape 1.
 ```
 
-## Étape 1 — Permissions
+## Étape 1 — Permissions — **ne jamais interrompre l'enchaînement**
 
 L'analyse enchaîne des dizaines d'appels `curl`, `git`, `grep` et d'écritures dans `/tmp`. Valider
-chaque demande une par une casse le rythme et fait perdre du temps. Une fois la clé résolue et
-**avant toute exécution de commande**, poser la question une seule fois, via `ask_user` :
+chaque demande une par une casse le rythme — mais **poser la question casse davantage** : un skill
+ne peut pas exécuter `/allow-all` lui-même, et une fois l'utilisateur invité à le taper, la
+conversation s'arrête sans jamais repartir toute seule. Le ticket n'est même pas lu.
+
+**Règle : ne rien demander, ne jamais s'arrêter.** Enchaîner directement sur l'étape 1b puis sur la
+collecte Jira, en respectant le tableau « Exécution autonome ».
+
+Se contenter d'un **conseil d'une ligne**, joint au premier message, sans attendre de réponse :
 
 ```
-Titre  : Autorisez-vous l'exécution sans confirmation ?
-Texte  : Cette analyse enchaîne de nombreuses commandes en lecture seule (Jira, git, grep,
-         téléchargement des pièces jointes dans /tmp). Sans autorisation globale, chaque
-         commande demandera une confirmation.
-Choix  : - Oui, activer /allow-all pour cette session (recommandé)
-         - Non, me demander à chaque fois
+Astuce : /allow-all évite d'avoir à confirmer chaque commande de cette analyse.
 ```
 
-Selon la réponse :
+À ne surtout pas faire :
 
-- **Oui** → répondre : « Tape `/allow-all`, je reprends ensuite sur `<ISSUE_KEY>`. » et
-  **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
-  interactive, seul l'utilisateur peut la taper. La clé reste connue : au message suivant,
-  reprendre directement à l'étape 2 **sans redemander le numéro de ticket** ni exiger de retaper
-  la commande.
-- **Non** → continuer normalement, en respectant strictement le tableau « Exécution autonome ».
+- appeler `ask_user` pour les permissions ;
+- écrire « tape `/allow-all`, je reprends ensuite » puis rendre la main — l'analyse meurt là ;
+- reposer le sujet plus tard, même si des confirmations s'enchaînent.
 
-Ne jamais reposer la question pendant l'analyse.
-
-> Pour éviter la question à chaque lancement, l'utilisateur peut ajouter
+> Pour supprimer les confirmations une fois pour toutes, ajouter
 > `"defaultPermissionMode": "allow-all"` dans `~/.copilot/settings.json` (fichier **utilisateur**
 > uniquement : la clé est ignorée depuis `.github/copilot/settings.json` d'un repo).
 > Elle ne s'applique qu'aux nouvelles sessions interactives (pas `--resume`, pas `-p`).

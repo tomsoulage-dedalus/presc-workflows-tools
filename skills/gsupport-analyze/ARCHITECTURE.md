@@ -28,8 +28,8 @@ flowchart TD
     U([Utilisateur]) -->|/gsupport-analyze GSUPPORT-XXXXX| E0
 
     subgraph ORCH["Orchestrateur — session courante"]
-        E0["Étape 0<br/>Résoudre la clé depuis le message,<br/>valider le préfixe GSUPPORT-"]
-        E1["Étape 1<br/>Permissions + vérif. du modèle"]
+        E0["Étape 0<br/>Résoudre la clé : message, puis<br/>historique de saisie du CLI,<br/>valider le préfixe GSUPPORT-"]
+        E1["Étape 1 — jamais bloquante<br/>Conseil /allow-all + vérif. du modèle"]
         E1B["Étape 1b — optionnelle<br/>Pré-analyse utilisateur :<br/>couche, domaine, repos exclus, piste"]
         E3["Étape 3<br/>Router le domaine, choisir les repos,<br/>filtrer par version, résoudre origin/branche"]
         E5["Étape 5 — QUALIFICATION<br/>jamais déléguée"]
@@ -66,7 +66,7 @@ flowchart TD
 
 | Bloc | Exécutant | Sortie |
 |---|---|---|
-| Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
+| Étapes 0, 1, 1b — résolution et validation de la clé, conseil de permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `compte-rendu-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `compte-rendu-code-<repo>.md` |
@@ -214,6 +214,8 @@ flowchart TD
 | Images non exploitables par le sous-agent | L'orchestrateur les regarde après coup, sans relancer tout le bloc |
 | Archive non décompressable | `Archive non décompressée : <nom> — <raison>` dans le rapport |
 | Rapport existant | Jamais écrasé : suffixe `-2`, `-3`… et mention de ce qui a changé |
+| Confirmations de permissions à répétition | Conseiller `/allow-all` en une ligne et **continuer** — ne jamais suspendre l'analyse en attendant que l'utilisateur le tape |
+| Clé absente du message déclencheur (slash-command : le CLI n'en transmet pas l'argument) | La relire dans `~/.copilot/command-history-state.json`, annoncer « clé reprise de ta commande », ne demander qu'en dernier recours |
 
 ## 9. Ce qu'il faut entretenir
 
