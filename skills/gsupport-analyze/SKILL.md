@@ -36,8 +36,9 @@ signalé comme un problème.
 
 **3. Lier le skill** : `bash skills/setup.sh` depuis la racine de `presc-workflows-tools`.
 
-**Outils requis** : `curl`, `jq`, `python3`, `unzip` — tous standards, aucun paquet à installer.
-`pdftotext` est optionnel (sans lui, les PDF joints sont signalés comme non exploitables).
+**Outils requis** : `curl`, `jq`, `python3`, `unzip`, `tar`, `gzip` — tous standards, aucun paquet à
+installer. `pdftotext`, `7z` et `unrar` sont optionnels (sans eux, les PDF et les archives `.7z`/`.rar`
+joints sont signalés comme non exploitables).
 
 ## Configuration requise
 
@@ -327,6 +328,10 @@ modèle `agents.jiraCollect` de `config.json`. Il écrit
 > S'il n'en est pas capable, il l'écrit dans le digest (`images non exploitées par l'agent`) et
 > l'orchestrateur les regarde lui-même après coup, sans relancer tout le bloc.
 
+> **Archives** — toute pièce jointe `.zip`/`.tar.gz`/`.7z`/`.rar` doit être décompressée et son
+> contenu lu fichier par fichier (voir 2.3.1). Le digest doit lister les fichiers extraits ; une
+> archive restée fermée est un échec de l'étape 2.
+
 ### Prompt à fournir au sous-agent
 
 Y reprendre intégralement les sections 2.1 à 2.4 ci-dessous (elles sont le contrat de l'agent),
@@ -337,7 +342,8 @@ plus les consignes communes, et exiger cette structure de digest :
 ## Champs        <tableau des champs standards et GSUPPORT>
 ## Symptôme      <description reformatée, scénario, résultat actuel/attendu, message d'erreur exact>
 ## Commentaires  <synthèse chronologique : auteur, date, apport>
-## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon>
+## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon
+ — pour une archive : la liste des fichiers extraits et l'apport de chacun>
 ## Liens         <tickets liés avec statut + résolution + apport de leur description ; liens externes>
 ## Pistes de recherche
 <les 3 à 8 chaînes de caractères exactes les plus discriminantes pour le `git grep` :
@@ -513,9 +519,58 @@ Puis exploiter selon le type :
   `Contenu non exploitable` si l'extraction échoue.
 - **PDF** → `pdftotext` s'il est installé, sinon signaler `Contenu non exploitable`.
 - **Logs / `.txt` / `.xml` / `.json`** → les lire, chercher les stacktraces et les codes d'erreur.
+- **Archives** (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.gz`, `.7z`, `.rar`) → **obligatoirement les
+  décompresser** et traiter chaque fichier extrait comme une pièce jointe à part entière
+  (voir 2.3.1). Une archive non ouverte = analyse incomplète.
 
 > Si une pièce jointe ne peut pas être lue, l'indiquer explicitement dans le rapport plutôt que
 > de l'ignorer silencieusement — une pièce jointe non lue est une information manquante.
+
+### 2.3.1 — Décompresser les archives (obligatoire)
+
+Les clients joignent très souvent un `.zip` contenant les logs applicatifs, des captures d'écran,
+des exports HL7/XML ou un document de reproduction. **Aucune archive ne doit rester fermée.**
+
+Extraire chaque archive dans un sous-dossier portant son nom, puis lister le contenu :
+
+```bash
+cd "/tmp/gsupport/<ISSUE_KEY>"
+for a in *.zip *.tar *.tar.gz *.tgz *.gz *.7z *.rar; do
+  [ -e "$a" ] || continue
+  dest="extracted/${a%%.*}"
+  mkdir -p "$dest"
+  case "$a" in
+    *.zip)            unzip -o -q "$a" -d "$dest" ;;
+    *.tar)            tar -xf "$a" -C "$dest" ;;
+    *.tar.gz|*.tgz)   tar -xzf "$a" -C "$dest" ;;
+    *.gz)             gunzip -c "$a" > "$dest/${a%.gz}" ;;
+    *.7z)             7z x -y -o"$dest" "$a" >/dev/null 2>&1 || echo "7z indisponible : $a" ;;
+    *.rar)            unrar x -o+ "$a" "$dest" >/dev/null 2>&1 || echo "unrar indisponible : $a" ;;
+  esac
+done
+find extracted -type f -printf '%s\t%p\n' | sort -rn
+```
+
+Règles :
+
+- **Récursivité** : si l'extraction produit elle-même une archive, la décompresser aussi
+  (relancer la boucle jusqu'à ce qu'il n'en reste plus). Limiter à 3 niveaux d'imbrication.
+- **Traiter chaque fichier extrait** selon son type avec les règles ci-dessus : images ouvertes
+  avec `view`, `.docx`/`.xlsx` extraits, logs lus.
+- **Gros fichiers de logs** : ne pas les lire intégralement. Chercher d'abord les occurrences
+  utiles autour de l'horodatage et des identifiants du ticket :
+
+  ```bash
+  grep -rniE "ERROR|SEVERE|Exception|Caused by|<CODE_ERREUR>|<ID_PATIENT>" \
+    /tmp/gsupport/<ISSUE_KEY>/extracted | head -100
+  ```
+
+  puis lire les blocs de contexte autour des hits pertinents (`grep -n -A 30`).
+- **Archive protégée par mot de passe ou outil manquant** (`7z`, `unrar`) : le signaler
+  explicitement dans le digest et dans le rapport (`Archive non décompressée : <nom> — <raison>`),
+  ne jamais l'ignorer silencieusement.
+- Dans le rapport, chaque archive donne une entrée listant **les fichiers qu'elle contenait** et
+  ce que chacun apporte.
 
 ## 2.4 — Liens distants et issues liées
 
@@ -1083,6 +1138,7 @@ Même contenu dans le fichier et dans le chat.
 <pour chaque pièce jointe : nom, type, auteur, date, et ce qu'elle apporte>
 <pour les images : description de ce qui est visible>
 <pour les documents : extrait utile>
+<pour les archives : liste des fichiers extraits et apport de chacun>
 <ou "Aucune pièce jointe.">
 
 ## Liens
@@ -1195,6 +1251,7 @@ Digests de collecte (non versionnés, effacés au redémarrage) :
 | Ticket introuvable | `Ticket <KEY> introuvable sur ${JIRA_DOMAIN}` |
 | Token absent | `Configurer JIRA_API_TOKEN dans ~/.bashrc` |
 | Pièce jointe illisible | `Contenu non exploitable` (et le signaler dans le rapport) |
+| Archive non décompressable (mot de passe, `7z`/`unrar` absent) | `Archive non décompressée : <nom> — <raison>` (et le signaler dans le rapport) |
 | Aucun commentaire | `Aucun commentaire.` |
 | Aucune piste dans le code | `Aucun code pertinent identifié.` |
 | Écriture du rapport impossible | `Impossible de sauvegarder le rapport : <erreur>` |
