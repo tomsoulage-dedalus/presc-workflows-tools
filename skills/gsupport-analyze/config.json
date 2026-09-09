@@ -409,12 +409,14 @@
       "path": "orme-pgd-config",
       "url": "git@github.com:dedalus-cis4u/orme-pgd-config.git",
       "description": "Configuration et parametrage PGD — back Java, front Angular. A regarder en priorite quand l'hypothese est un probleme de configuration client plutot qu'un bug de code."
-    },
+    }
+  ],
+  "excludedRepositories": [
     {
       "name": "orme-medication-packaging",
-      "path": "orme-medication-packaging",
       "url": "git@github.com:dedalus-cis4u/orme-medication-packaging.git",
-      "description": "Packaging, deploiement et DML (dml/, internal-dml/). Utile pour verifier ce qui est reellement livre dans une version donnee ([G] Detected in Version)."
+      "description": "Packaging, deploiement et DML (dml/, internal-dml/).",
+      "reason": "Exclu systematiquement de l'investigation GSUPPORT : ne contient aucune logique metier, seulement du packaging et des scripts de livraison. Ne jamais lancer de sous-agent dessus, ne pas le lister dans le diagnostic des repos, ne pas proposer de le cloner."
     }
   ]
 }

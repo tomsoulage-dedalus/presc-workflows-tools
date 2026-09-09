@@ -61,12 +61,24 @@ dans ce fichier-ci : ni un chemin, ni un nom de repo, ni une correspondance vers
 | `glossary` | jargon client → terme technique | 3.1 |
 | `i18nHint` | où se trouvent réellement les libellés affichés | 4.1 |
 | `repositories` | rôle de chaque repo, URL de clone, `versionRange` | 3 |
+| `excludedRepositories` | repos volontairement hors périmètre, avec le motif | 3 |
 
 Les trois blocs de connaissance — `domains`, `glossary`, `i18nHint` — sont ceux qui font la
 différence entre une recherche ciblée et une recherche à l'aveugle. **Ils vieillissent** : les
 tenir à jour au fil des tickets fait partie du travail d'analyse, pas d'une maintenance à part.
 
 Chaque entrée de `repositories` porte `name`, `path` (relatif à `reposDir`) et `description`.
+
+Un repo listé dans `excludedRepositories` est **hors périmètre en permanence** : ne jamais lancer
+de sous-agent dessus, ne pas le faire apparaître dans le diagnostic de l'étape 3, ne pas proposer
+de le cloner. Comme toutes les boucles du skill itèrent sur `.repositories[]`, l'exclusion est
+automatique — il suffit de ne pas réintroduire l'entrée. C'est aujourd'hui le cas de
+`orme-medication-packaging`, qui ne porte que du packaging et des scripts de livraison, jamais de
+logique métier.
+
+```bash
+jq -r '.excludedRepositories[] | "\(.name)\t\(.reason)"' "$SKILL_DIR/config.json"
+```
 
 ```bash
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")

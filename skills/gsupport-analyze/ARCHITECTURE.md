@@ -225,6 +225,7 @@ flowchart TD
 - `glossary` — tout terme client rencontré et absent doit y être ajouté ;
 - `domains.paths` et `grepSeeds` — à corriger dès qu'un chemin ne renvoie plus rien ;
 - `repositories.versionRange` — à mettre à jour à chaque bascule de version ;
+- `excludedRepositories` — les repos hors périmètre permanent (packaging, livraison) et leur motif ;
 - `agents.*.model` — les identifiants de modèles évoluent, ils ne sont jamais en dur dans `SKILL.md`.
 
 Une analyse qui révèle une lacune doit corriger `config.json` dans la foulée et le mentionner.
