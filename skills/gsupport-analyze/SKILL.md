@@ -29,6 +29,11 @@ export JIRA_API_TOKEN="<PAT Jira Server personnel>"
 préparer donc, mais il reste possible de renseigner `reposDir` à l'avance, ou d'exporter
 `REPOS_DIR` qui est prioritaire.
 
+**Aucun repo n'est à cloner à l'avance** : à chaque analyse, le skill affiche l'état des repos
+(présent, branche de la version disponible) et indique lesquels sont **requis pour ce ticket
+précis**, avec la commande `git clone` correspondante. Un repo absent mais non pertinent n'est pas
+signalé comme un problème.
+
 **3. Lier le skill** : `bash skills/setup.sh` depuis la racine de `presc-workflows-tools`.
 
 **Outils requis** : `curl`, `jq`, `python3`, `unzip` — tous standards, aucun paquet à installer.
@@ -408,12 +413,56 @@ Correspondances validées : `03.17.09.02` → `317XXXX`, `03.21.02.05` → `3210
 
 #### Rafraîchir les références
 
-Avant de résoudre la branche, mettre à jour les refs distantes du repo. `fetch` ne touche ni la
-branche courante, ni le working tree, ni les stashes :
+Avant tout diagnostic et toute recherche, mettre à jour les refs distantes de **chaque repo
+présent**. `fetch` ne touche ni la branche courante, ni le working tree, ni les stashes :
 
 ```bash
 git -C "$REPO" fetch --quiet origin
 ```
+
+#### Diagnostic des repos — à afficher avant toute recherche
+
+Après le `fetch` (sinon une branche récente paraîtra absente à tort), dresser l'état des repos et
+**l'afficher à l'utilisateur** : il doit savoir sur quoi l'analyse s'appuie, et ce qui lui manque.
+
+```bash
+printf '%-28s %-9s %-16s %s\n' REPO PRESENT BRANCHE STATUT
+jq -r '.repositories[] | "\(.name)\t\(.path)\t\(.url // "")"' "$SKILL_DIR/config.json" |
+while IFS=$'\t' read -r name path url; do
+  dir="$REPOS_DIR/$path"
+  if [ ! -d "$dir/.git" ]; then
+    printf '%-28s %-9s %-16s %s\n' "$name" "non" "-" "MANQUANT : git clone $url"
+  else
+    b=$(pick_branch "$dir" "$VERSION")
+    if [ -n "$b" ]; then
+      printf '%-28s %-9s %-16s %s\n' "$name" "oui" "$b/develop" "OK"
+    else
+      printf '%-28s %-9s %-16s %s\n' "$name" "oui" "-" "pas de branche pour cette version"
+    fi
+  fi
+done
+```
+
+Interpréter chaque cas :
+
+| Cas | Signification | Conduite à tenir |
+|---|---|---|
+| `OK` | repo cloné et branche de la version disponible | analyser |
+| `pas de branche pour cette version` | repo cloné mais la version n'y existe pas | souvent normal (repo plus récent que la version, ou règle 3.22) — proposer la branche la plus proche et demander confirmation |
+| `MANQUANT` | repo absent du poste | donner la commande `git clone` exacte |
+
+**Distinguer le nécessaire du superflu.** Croiser ce diagnostic avec les repos retenus à
+l'étape 6.0 : un repo manquant mais non pertinent pour ce ticket ne doit pas inquiéter
+l'utilisateur. Formuler par exemple :
+
+- *« `orme-global-repo` est requis pour ce ticket (version 3.17) et il est absent :
+  `git clone git@github.com:dedalus-cis4u/orme-global-repo.git` dans `<reposDir>`. »*
+- *« `orme-pgd-config` est absent mais n'est pas nécessaire ici. »*
+
+Si un repo **requis** manque, proposer à l'utilisateur de le cloner (commande fournie), puis
+attendre sa réponse. S'il refuse ou ne peut pas, poursuivre en excluant ce repo, et écrire dans le
+rapport ce qui n'a pas pu être vérifié à cause de cette absence — une conclusion tirée sans un repo
+requis doit voir sa confiance abaissée.
 
 #### Branche absente
 
@@ -660,9 +709,12 @@ Même contenu dans le fichier et dans le chat.
 
 **Version de référence** : <[G] Detected in Version> → clé `<clé>`
 
-| Repo | Branche analysée | Remarque |
-|---|---|---|
-| <repo> | `origin/<branche>` | <exacte / plus proche confirmée / exclu> |
+| Repo | Requis | Branche analysée | Remarque |
+|---|---|---|---|
+| <repo> | oui / non | `origin/<branche>` | <exacte / plus proche confirmée / absent du poste / exclu> |
+
+**Repos requis manquants** : <liste + commande `git clone`, ou "aucun">
+**Non vérifié faute de repo** : <ce qui n'a pas pu être confirmé, ou "rien">
 
 ### Chaîne de raisonnement
 1. Point de départ : <message d'erreur / écran / libellé>
