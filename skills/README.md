@@ -26,7 +26,7 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 |--------------------|---|---|----------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
 | **task-start**     | `/task-start <TICKET>` | `main` / `develop` | Branche + analyse en une seule commande                                    | Crée la branche depuis un ticket Jira et lance l'analyse                                                                                      |
 | **task-analyze**   | `/task-analyze <TICKET>` | n'importe quelle branche | Plan structuré avant de coder, évite les mauvaises pistes                  | Analyse un ticket Jira, investigue le code, génère un `ANALYZE.md`                                                                            |
-| **gsupport-analyze** | `/gsupport-analyze <GSUPPORT-XXXXX>` | n'importe quelle branche | Qualifie un ticket client avant d'ouvrir un ORBISBUG inutile | Analyse un ticket client GSUPPORT : lit **tous** les commentaires et **toutes** les pièces jointes, investigue le code, qualifie la nature du problème et génère un `<KEY>-GSUPPORT.md` |
+| **gsupport-analyze** | `/gsupport-analyze <GSUPPORT-XXXXX>` | n'importe quelle branche | Qualifie un ticket client avant d'ouvrir un ORBISBUG inutile | Analyse un ticket client GSUPPORT : lit **tous** les commentaires et **toutes** les pièces jointes, investigue le code, qualifie la nature du problème et génère un `<KEY>-analyse.md` |
 | **task-implement** | `/task-implement` | branche de la tâche | Faire `/clear` avant — le contexte est dans `ANALYZE.md`                   | Implémente le code (🟠 Java/Jakarta EE back et/ou 🔵 Angular front) en s'appuyant sur les règles du projet et les leçons passées              |
 | **test-check**     | `/test-check` | branche de la tâche | Détecte les régressions avant la PR, évite les surprises en CI             | Vérifie que les changements n'ont pas cassé de tests existants (🔵 Angular + 🟠 Java) — appelle `/test-implement` si des tests échouent       |
 | **test-implement** | `/test-implement` | branche de la tâche | Génère le boilerplate des tests manquants automatiquement                  | Écrit et corrige les tests (🔵 specs Angular + 🟠 tests JUnit) pour les fichiers sans couverture et les tests en échec                        |
@@ -35,6 +35,29 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 | **pr-create**      | `/pr-create` | branche de la tâche | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Génère et crée la Pull Request GitHub (draft) vers `develop` avec le bon format de titre et le label WORKFLOWS                                |
 | **pr-fix-comment** | `/pr-fix-comment` | branche de la tâche | Fix ciblé sans avoir à retrouver le contexte du commentaire                | Fixe un commentaire de review Copilot sur la PR courante                                                                                      |
 | **pr-fix-build**   | `/pr-fix-build <branch> <fix>` | n'importe quelle branche | Corrige la branche d'une PR sans `git stash` ni `checkout`                 | Corrige le build d'une branche distante (format, lint, tests) sans changer de branche locale                                                  |
+
+## Contribuer à un skill
+
+Chaque skill est un dossier sous `skills/` contenant au minimum un `SKILL.md` (le contrat, seul
+fichier normatif), parfois un `config.json` (la connaissance : repos, domaines, glossaire, modèles)
+et, pour les skills les plus gros, un `ARCHITECTURE.md` (la vue d'ensemble en schémas Mermaid).
+
+**Règle : toute modification du flux d'un skill doit mettre à jour son `ARCHITECTURE.md` dans le
+même commit.** Cela s'applique aussi aux modifications faites par un agent : s'il édite le
+`SKILL.md`, il répercute les schémas avant de rendre la main, sans qu'on ait à le lui demander.
+
+Le déclencheur, c'est le **flux** — qui exécute quoi, dans quel ordre, avec quelles entrées et
+quelles sorties. Une simple précision de rédaction dans une étape existante ne demande pas de
+toucher aux schémas. Chaque skill documenté précise la correspondance changement → schéma dans sa
+section « Maintenir la documentation d'architecture » (voir
+[gsupport-analyze](gsupport-analyze/SKILL.md)).
+
+Deux réflexes qui vont avec :
+
+- **valider les diagrammes Mermaid avant de committer** — un diagramme invalide ne s'affiche
+  simplement pas sur GitHub, donc personne ne le remarque ;
+- si le changement modifie ce que le skill fait **pour l'utilisateur** (et pas seulement comment il
+  le fait), mettre aussi à jour sa ligne dans le catalogue ci-dessus et son exemple d'utilisation.
 
 ## Exemples d'utilisation
 
@@ -59,7 +82,7 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 /gsupport-analyze GSUPPORT-47944
 /gsupport-analyze https://jira.dedalus.com/browse/GSUPPORT-47944
 ```
-> Analyse une remontée **client**. Lit le ticket, **tous** les commentaires et **toutes** les pièces jointes (captures, scénarios `.docx` et leurs images embarquées), investigue le code **sur plusieurs repos** (`config.json`) en suivant la chaîne message d'erreur → front → REST → service → données, puis **qualifie** la demande : bug dans notre code, problème de configuration/données, comportement attendu, évolution, ou informations insuffisantes. Génère `.copilot/analyses/<KEY>-GSUPPORT.md` avec les hypothèses, les informations manquantes (et qui peut les fournir), les questions à poser au client et un brouillon de réponse support.
+> Analyse une remontée **client**. Lit le ticket, **tous** les commentaires et **toutes** les pièces jointes (captures, scénarios `.docx` et leurs images embarquées), investigue le code **sur plusieurs repos** (`config.json`) en suivant la chaîne message d'erreur → front → REST → service → données, puis **qualifie** la demande : bug dans notre code, problème de configuration/données, comportement attendu, évolution, ou informations insuffisantes. Génère `.copilot/analyses/<KEY>-analyse.md` avec les hypothèses, les informations manquantes (et qui peut les fournir), les questions à poser au client et un brouillon de réponse support.
 >
 > Les repos fouillés sont déclarés dans `skills/gsupport-analyze/config.json` — à adapter à son poste.
 >

@@ -1,6 +1,6 @@
 ---
 name: "gsupport-analyze"
-description: "Analyse d'un ticket client GSUPPORT : lit le ticket, tous les commentaires et toutes les pièces jointes, investigue le code, qualifie la nature du problème (bug / config / comportement attendu / évolution) et sauvegarde un GSUPPORT.md — sans créer de branche ni de PR"
+description: "Analyse d'un ticket client GSUPPORT : lit le ticket, tous les commentaires et toutes les pièces jointes, investigue le code, qualifie la nature du problème (bug / config / comportement attendu / évolution) et sauvegarde un rapport <ISSUE_KEY>-analyse.md — sans créer de branche ni de PR"
 ---
 
 # GSupport Analyze Skill
@@ -169,7 +169,7 @@ chez l'orchestrateur.
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `digest-jira.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `digest-code-<repo>.md` |
-| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `GSUPPORT.md` |
+| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<ISSUE_KEY>-analyse.md` |
 
 ### Règle du passage par fichiers
 
@@ -1053,10 +1053,10 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 REPORT_DIR="${REPO_ROOT}/$(jq -r '.reportDir // ".copilot/analyses"' "$SKILL_DIR/config.json")"
 mkdir -p "$REPORT_DIR"
 
-REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT.md"
+REPORT="${REPORT_DIR}/<ISSUE_KEY>-analyse.md"
 n=2
 while [ -e "$REPORT" ]; do
-  REPORT="${REPORT_DIR}/<ISSUE_KEY>-GSUPPORT-${n}.md"
+  REPORT="${REPORT_DIR}/<ISSUE_KEY>-analyse-${n}.md"
   n=$((n + 1))
 done
 echo "$REPORT"
@@ -1256,3 +1256,61 @@ Digests de collecte (non versionnés, effacés au redémarrage) :
 | Aucune piste dans le code | `Aucun code pertinent identifié.` |
 | Écriture du rapport impossible | `Impossible de sauvegarder le rapport : <erreur>` |
 | Sous-agent en échec ou sortie vide | Exécuter le bloc soi-même, sans relancer l'agent, et l'indiquer dans le rapport |
+
+---
+
+## Maintenir la documentation d'architecture
+
+`ARCHITECTURE.md` est la vue d'ensemble du skill : c'est par lui que l'équipe comprend le
+découpage orchestrateur / sous-agents. Une doc qui diverge du skill est pire que pas de doc —
+elle fait raisonner sur un fonctionnement qui n'existe plus.
+
+**Règle : toute modification de `SKILL.md` ou de la structure de `config.json` doit être
+accompagnée de la mise à jour de `ARCHITECTURE.md` dans le même commit.**
+
+Cela vaut aussi bien pour une modification humaine que pour une modification faite par un agent :
+si l'agent édite le skill, il met à jour `ARCHITECTURE.md` avant de rendre la main, sans attendre
+qu'on le lui demande.
+
+### Quel changement impacte quel schéma
+
+| Changement dans le skill | À répercuter dans `ARCHITECTURE.md` |
+|---|---|
+| Ajout, suppression ou renumérotation d'une étape | § 2 flowchart global, § 3 tableau « qui fait quoi » |
+| Un bloc passe de l'orchestrateur à un sous-agent (ou l'inverse) | § 2, § 3, et la liste « ne se délègue jamais » |
+| Nouveau fichier écrit dans `/tmp/gsupport/<KEY>/` | § 4 passage par fichiers |
+| Nouveau type de pièce jointe ou nouvelle règle d'extraction | § 5 aiguillage des pièces jointes |
+| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 6 |
+| Nouvelle catégorie de qualification ou nouveau garde-fou | § 7 |
+| Nouveau cas d'erreur ou de reprise | § 8 tableau de reprise sur incident |
+| Nouvelle clé structurante dans `config.json` | § 9 « ce qu'il faut entretenir », et § 2 si elle alimente une étape |
+
+Ajouter une simple précision de rédaction dans une étape existante ne demande pas de toucher aux
+schémas. Le déclencheur, c'est le **flux** : qui exécute quoi, dans quel ordre, avec quelles
+entrées et quelles sorties.
+
+### Vérifier les diagrammes avant de committer
+
+Un diagramme Mermaid invalide ne s'affiche pas sur GitHub, il ne casse rien d'autre — donc
+personne ne le remarque. Les valider explicitement :
+
+```bash
+cd skills/gsupport-analyze
+rm -rf /tmp/mmd && mkdir -p /tmp/mmd
+
+python3 - <<'PY'
+import re, pathlib
+src = pathlib.Path("ARCHITECTURE.md").read_text()
+for i, block in enumerate(re.findall(r"```mermaid\n(.*?)```", src, re.S)):
+    pathlib.Path(f"/tmp/mmd/d{i}.mmd").write_text(block)
+PY
+
+for f in /tmp/mmd/*.mmd; do
+  npx -y @mermaid-js/mermaid-cli@11 -i "$f" -o "${f%.mmd}.svg" >/dev/null 2>&1 \
+    || echo "Diagramme invalide : $f"
+done
+rm -rf /tmp/mmd
+```
+
+Enfin, si le changement modifie ce que le skill fait **pour l'utilisateur** (et pas seulement
+comment il le fait), mettre aussi à jour la ligne du skill dans `skills/README.md`.

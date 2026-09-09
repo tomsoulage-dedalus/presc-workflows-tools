@@ -3,6 +3,11 @@
 Document destiné aux développeurs qui utilisent ou font évoluer le skill.
 La référence normative reste `SKILL.md` ; ce fichier n'en est que la vue d'ensemble.
 
+> **À maintenir avec le skill.** Toute modification du flux dans `SKILL.md` (étapes, répartition
+> orchestrateur / sous-agents, fichiers produits, catégories de qualification, cas d'erreur) doit
+> être répercutée ici dans le même commit. Voir la section « Maintenir la documentation
+> d'architecture » de `SKILL.md` pour la correspondance changement → schéma.
+
 ## 1. Principe
 
 Une analyse GSUPPORT brasse un gros volume brut (issue.json complet, dizaines de commentaires,
@@ -45,7 +50,7 @@ flowchart TD
     A2 -->|digest-jira.md| E3
     E3 --> A4A & A4B & A4C
     A4A & A4B & A4C -->|digest-code-repo.md| E5
-    E5 --> E6 --> E89 --> R([".copilot/analyses/KEY-GSUPPORT.md"])
+    E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
 
     CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
     CFG -.->|model + reasoningEffort| A2
@@ -63,7 +68,7 @@ flowchart TD
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `digest-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `digest-code-<repo>.md` |
-| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<KEY>-GSUPPORT.md` |
+| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<KEY>-analyse.md` |
 
 Ne se délègue **jamais** :
 
@@ -89,7 +94,7 @@ flowchart LR
     A4 -.->|synthèse ≤ 30 lignes| O
     DJ -->|relecture ciblée<br/>## Symptôme, ## Commentaires| O
     DC -->|relecture ciblée<br/>## Verdict du repo| O
-    O --> REP["&lt;KEY&gt;-GSUPPORT.md<br/>versionné dans le dépôt"]
+    O --> REP["&lt;KEY&gt;-analyse.md<br/>versionné dans le dépôt"]
 
     style REP fill:#e8f6ec,stroke:#2e7d4f
 ```
