@@ -46,13 +46,25 @@ signalé comme un problème.
 
 > Les variables sont définies dans `~/.bashrc`. **Toujours lancer `source ~/.bashrc`** avant toute action.
 
-### Repos analysables — `config.json`
+### `config.json` — la connaissance du skill
 
-Les chemins des repos ne sont **jamais** en dur : ils sont déclarés dans `config.json`, situé dans
-ce même dossier. Chaque entrée porte `name`, `path` (relatif à `reposDir`) et `description`.
+`config.json`, situé dans ce même dossier, est la **seule** source de vérité. Rien n'est en dur
+dans ce fichier-ci : ni un chemin, ni un nom de repo, ni une correspondance version → repo.
 
-`config.json` est la **seule** source de vérité : lire `reposDir` et `reportDir` depuis le fichier,
-ne jamais les supposer.
+| Bloc | Rôle | Utilisé à l'étape |
+|---|---|---|
+| `reposDir`, `reportDir` | où sont les repos, où écrire le rapport | 3, 8 |
+| `agents`, `orchestratorModel` | modèles des sous-agents et modèle attendu pour la qualification | 0, 2, 4 |
+| `domains` | routage métier : `aliases` client, `repos`, `paths`, `grepSeeds` | 3.1, 4 |
+| `glossary` | jargon client → terme technique | 3.1 |
+| `i18nHint` | où se trouvent réellement les libellés affichés | 4.1 |
+| `repositories` | rôle de chaque repo, URL de clone, `versionRange` | 3 |
+
+Les trois blocs de connaissance — `domains`, `glossary`, `i18nHint` — sont ceux qui font la
+différence entre une recherche ciblée et une recherche à l'aveugle. **Ils vieillissent** : les
+tenir à jour au fil des tickets fait partie du travail d'analyse, pas d'une maintenance à part.
+
+Chaque entrée de `repositories` porte `name`, `path` (relatif à `reposDir`) et `description`.
 
 ```bash
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
@@ -110,7 +122,7 @@ jq -r '.repositories[] | "\(.name)\t\(.description)"' "$SKILL_DIR/config.json"
 
 Un ticket GSUPPORT ne se limite presque jamais au repo courant : le message d'erreur peut venir
 de `orme-prescription-api`, un libellé de `orme-common`, une règle historique de
-`orme-medication-legacy`. **Sélectionner les repos à fouiller à l'étape 6**, en confrontant le
+`orme-medication-legacy`. **Sélectionner les repos à fouiller à l'étape 3**, en confrontant le
 symptôme aux `description` de `config.json`. Ignorer un repo absent du disque sans bloquer, et
 lister les repos ignorés dans le rapport.
 
@@ -128,6 +140,7 @@ jamais le lire en entier.
 | Extraction d'archives dans `/tmp` | Installation de paquets |
 | `git grep`, `git show`, `git log`, `git ls-tree`, `git rev-parse` sur `origin/<branche>` | Commit / push |
 | `git fetch origin` (met à jour les refs distantes uniquement) | |
+| Lancement des sous-agents de collecte (étapes 2 et 4) | |
 | Création du dossier de rapport et écriture d'un **nouveau** fichier | |
 
 **Interdit** dans les repos de l'utilisateur, même avec son accord : `git checkout`, `git switch`,
@@ -135,6 +148,103 @@ jamais le lire en entier.
 courante, le working tree ou les stashes. Tout est faisable en lecture seule sur `origin/<branche>`.
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
+
+Si l'utilisateur a accepté `/allow-all` à l'étape 0, ce tableau reste la règle de conduite : les
+opérations de la colonne de droite continuent d'être annoncées et validées explicitement.
+
+## Architecture d'exécution — orchestrateur et sous-agents
+
+Une analyse GSUPPORT brasse beaucoup de matière brute : un `issue.json` complet, des dizaines de
+commentaires, des pièces jointes, puis des recherches de code sur plusieurs repos. Tout garder dans
+une seule conversation sature le contexte avant la qualification, qui est justement l'étape qui a
+besoin de tout voir.
+
+Le skill est donc découpé : la **collecte** est déléguée à des sous-agents, la **décision** reste
+chez l'orchestrateur.
+
+| Bloc | Exécutant | Sortie |
+|---|---|---|
+| Étapes 0, 1 — permissions, modèle, validation de la clé | orchestrateur | — |
+| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `digest-jira.md` |
+| Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
+| Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `digest-code-<repo>.md` |
+| Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `GSUPPORT.md` |
+
+### Règle du passage par fichiers
+
+C'est elle qui protège réellement le contexte, plus encore que le découpage lui-même.
+
+Chaque sous-agent **écrit son résultat complet dans un fichier** sous `/tmp/gsupport/<ISSUE_KEY>/`
+et ne **renvoie qu'une synthèse courte** (30 lignes maximum) à l'orchestrateur. L'orchestrateur ne
+relit ensuite que les sections dont il a besoin, au moment d'écrire le rapport — jamais les
+fichiers entiers d'un coup, et jamais le JSON brut.
+
+Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice du découpage.
+
+### Ce qui ne se délègue jamais
+
+- Toute question à l'utilisateur (`ask_user`) : permissions, `reposDir` introuvable, repo requis
+  manquant, branche approchante à confirmer. Un sous-agent ne peut pas dialoguer.
+- La **qualification** (étape 5) : elle croise Jira, code et contradictions entre commentaires.
+  C'est la raison d'être du skill, elle reste chez l'orchestrateur.
+- L'écriture du rapport final.
+
+### Nommage des agents
+
+Plusieurs agents tournent en parallèle : sans nom parlant, l'utilisateur ne sait pas lequel est en
+train de travailler ni sur quoi. Renseigner **`name`** et **`description`** à chaque lancement.
+
+| Bloc | `name` | `description` |
+|---|---|---|
+| Étape 2 | `collecte-jira-<ISSUE_KEY>` | `Collecte Jira <ISSUE_KEY>` |
+| Étape 4 | `code-<repo>` | `Investigation <repo> sur <branche>` |
+
+Exemples : `collecte-jira-GSUPPORT-47944`, `code-orme-prescription` avec la description
+`Investigation orme-prescription sur 317XXXX/develop`.
+
+Le nom porte **le repo, pas un numéro** : `code-1`, `code-2` ne dit rien quand trois agents
+tournent ensemble. Quand un digest sera relu à l'étape 5, c'est par ce nom qu'on le retrouvera.
+
+### Consignes communes à tous les sous-agents
+Les sous-agents sont **sans mémoire** : chaque prompt doit être autoportant. Y inclure
+systématiquement :
+
+- la clé du ticket et le chemin `/tmp/gsupport/<ISSUE_KEY>/` où écrire,
+- le rappel que `JIRA_DOMAIN` / `JIRA_API_TOKEN` viennent de `source ~/.bashrc`,
+- le rappel du masquage des données patient (`Contains PID`),
+- la contrainte de sortie : écrire le fichier, ne renvoyer qu'une synthèse ≤ 30 lignes,
+- l'interdiction absolue de `git checkout` / `switch` / `stash` / `worktree` / `reset` / `pull`,
+- l'interdiction de poser une question : en cas de blocage, l'écrire dans le digest et rendre la
+  main.
+
+Si un sous-agent échoue ou rend une sortie vide, **ne pas le relancer une seconde fois** :
+exécuter son bloc directement, et le signaler dans le rapport.
+
+### Choix des modèles
+
+Tous les blocs ne demandent pas la même puissance : la collecte Jira est mécanique, l'investigation
+de code est du raisonnement. Les modèles sont déclarés dans `config.json` sous `agents`, jamais en
+dur ici — les identifiants évoluent et tout le monde n'a pas les mêmes accès.
+
+```bash
+jq -r '.agents | to_entries[] | "\(.key)\t\(.value.model // "défaut")\t\(.value.reasoningEffort // "-")"' \
+  "$SKILL_DIR/config.json"
+```
+
+| Bloc | Clé `config.json` | Intention |
+|---|---|---|
+| Étape 2 — collecte Jira | `agents.jiraCollect` | modèle rapide : `curl`, `jq`, extraction de documents, gros volume de tokens et peu de raisonnement |
+| Étape 4 — investigation code | `agents.codeInvestigate` | modèle fort avec `reasoningEffort` élevé : chaîne message d'erreur → front → REST → condition métier |
+
+Passer ces valeurs aux paramètres `model` et `reasoning_effort` de l'outil `task`. Deux garde-fous :
+
+- Valeur vide → lancer l'agent **sans** forcer de modèle.
+- Identifiant refusé (modèle inconnu ou non accessible) → **relancer une fois sans le paramètre
+  `model`** plutôt que d'abandonner l'analyse, et le signaler en une ligne. Un `config.json` recopié
+  d'un autre poste ne doit jamais bloquer un ticket.
+
+**Le modèle de l'orchestrateur, lui, ne se force pas** : il dépend du `/model` de la session. C'est
+pourtant lui qui qualifie (étape 5). D'où la vérification à l'étape 0.
 
 ## Commande
 
@@ -145,6 +255,58 @@ extraire la clé de l'URL le cas échéant.
 
 ---
 
+## Étape 0 — Permissions
+
+L'analyse enchaîne des dizaines d'appels `curl`, `git`, `grep` et d'écritures dans `/tmp`. Valider
+chaque demande une par une casse le rythme et fait perdre du temps. **Avant toute autre action**,
+poser la question une seule fois, via `ask_user` :
+
+```
+Titre  : Autorisez-vous l'exécution sans confirmation ?
+Texte  : Cette analyse enchaîne de nombreuses commandes en lecture seule (Jira, git, grep,
+         téléchargement des pièces jointes dans /tmp). Sans autorisation globale, chaque
+         commande demandera une confirmation.
+Choix  : - Oui, activer /allow-all pour cette session (recommandé)
+         - Non, me demander à chaque fois
+```
+
+Selon la réponse :
+
+- **Oui** → répondre : « Tape `/allow-all` puis relance `/gsupport-analyze <ISSUE_KEY>`. »
+  et **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
+  interactive, seul l'utilisateur peut la taper.
+- **Non** → continuer normalement, en respectant strictement le tableau « Exécution autonome ».
+
+Ne jamais reposer la question pendant l'analyse.
+
+> Pour éviter la question à chaque lancement, l'utilisateur peut ajouter
+> `"defaultPermissionMode": "allow-all"` dans `~/.copilot/settings.json` (fichier **utilisateur**
+> uniquement : la clé est ignorée depuis `.github/copilot/settings.json` d'un repo).
+> Elle ne s'applique qu'aux nouvelles sessions interactives (pas `--resume`, pas `-p`).
+
+### Vérifier le modèle de la session
+
+La qualification (étape 5) est un exercice de jugement : arbitrer entre « bug » et « comportement
+attendu » à partir de commentaires contradictoires et d'une condition métier. Un modèle léger y
+conclut mécaniquement.
+
+Comparer le modèle de la session à `orchestratorModel.preferred` de `config.json` :
+
+```bash
+jq -r '.orchestratorModel.preferred | join(", ")' "$SKILL_DIR/config.json"
+```
+
+S'il n'en fait pas partie, **avertir une fois puis continuer** — ne jamais bloquer l'analyse :
+
+```
+Session sur <modèle>. La qualification gagne à tourner sur <liste des modèles préférés>.
+Tu peux basculer avec /model puis relancer, ou continuer : l'investigation de code utilisera
+de toute façon <agents.codeInvestigate.model>.
+```
+
+Ne pas répéter l'avertissement pendant l'analyse, et le reporter en une ligne dans le rapport :
+la confiance d'une qualification dépend du modèle qui l'a produite.
+
 ## Étape 1 — Valider la clé
 
 ```
@@ -154,7 +316,54 @@ Si <ISSUE_KEY> ne commence pas par "GSUPPORT-" :
   → arrêter
 ```
 
-## Étape 2 — Lire le ticket
+## Étape 2 — Collecte Jira — **déléguée à un sous-agent**
+
+Ce bloc produit le gros du volume brut (JSON complet, commentaires, pièces jointes). Il est confié
+à **un seul sous-agent** de type `explore`, nommé `collecte-jira-<ISSUE_KEY>` et lancé avec le
+modèle `agents.jiraCollect` de `config.json`. Il écrit
+`/tmp/gsupport/<ISSUE_KEY>/digest-jira.md` et ne renvoie qu'une synthèse.
+
+> **Pièces jointes et images** — le sous-agent doit pouvoir ouvrir des images avec l'outil `view`.
+> S'il n'en est pas capable, il l'écrit dans le digest (`images non exploitées par l'agent`) et
+> l'orchestrateur les regarde lui-même après coup, sans relancer tout le bloc.
+
+### Prompt à fournir au sous-agent
+
+Y reprendre intégralement les sections 2.1 à 2.4 ci-dessous (elles sont le contrat de l'agent),
+plus les consignes communes, et exiger cette structure de digest :
+
+```markdown
+# Digest Jira — <ISSUE_KEY>
+## Champs        <tableau des champs standards et GSUPPORT>
+## Symptôme      <description reformatée, scénario, résultat actuel/attendu, message d'erreur exact>
+## Commentaires  <synthèse chronologique : auteur, date, apport>
+## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon>
+## Liens         <tickets liés avec statut + résolution + apport de leur description ; liens externes>
+## Pistes de recherche
+<les 3 à 8 chaînes de caractères exactes les plus discriminantes pour le `git grep` :
+ message d'erreur, libellé d'écran, code d'erreur, nom de bouton, classe apparaissant dans une
+ stacktrace. C'est le livrable le plus important pour l'étape 4.>
+## Vocabulaire client
+<les termes métier employés par le client, traduits via le `glossary` de config.json ;
+ signaler tout terme absent du glossaire — il devra y être ajouté>
+## Ce qui n'a pas pu être lu
+```
+
+La **synthèse renvoyée** (≤ 30 lignes) doit tenir en : version détectée, produit, symptôme en
+trois phrases, message d'erreur exact, pistes de recherche, et ce qui n'a pas pu être lu.
+
+### Ce que l'orchestrateur en fait
+
+Lire la synthèse, puis ne relire dans `digest-jira.md` que les sections nécessaires à l'étape
+concernée. Ne jamais charger `issue.json` ni `comments.json` dans le contexte de l'orchestrateur :
+ils restent sur disque, à disposition d'un `jq` ciblé si un champ précis manque.
+
+Si `Contains PID = Yes`, vérifier dans la synthèse qu'aucune donnée patient n'a fuité avant de
+recopier quoi que ce soit dans le rapport.
+
+---
+
+## 2.1 — Lire le ticket
 
 Récupérer **tous** les champs (les tickets GSUPPORT portent l'essentiel de l'information dans des
 custom fields, ne pas filtrer avec `?fields=`) :
@@ -234,7 +443,7 @@ jq -r '
 > un nom ou une date de naissance : ne jamais recopier ces valeurs dans le fichier généré.
 > Les remplacer par `<IPP masqué>`, `<patient masqué>`. Le fichier généré reste dans le repo.
 
-## Étape 3 — Lire TOUS les commentaires
+## 2.2 — Lire TOUS les commentaires
 
 Les commentaires portent souvent l'essentiel de l'analyse (échanges support ↔ client ↔ R&D,
 compléments de reproduction, contre-exemples). Ils sont **obligatoires**, jamais optionnels.
@@ -257,7 +466,7 @@ Lire **chaque** commentaire, puis en produire une synthèse chronologique qui re
 - les contradictions avec la description initiale,
 - les décisions déjà prises (ticket rejeté, workaround fourni, escalade…).
 
-## Étape 4 — Télécharger et lire TOUTES les pièces jointes
+## 2.3 — Télécharger et lire TOUTES les pièces jointes
 
 ```bash
 jq -r '.fields.attachment[] | "\(.id)\t\(.filename)\t\(.mimeType)\t\(.size)\t\(.content)"' \
@@ -308,7 +517,7 @@ Puis exploiter selon le type :
 > Si une pièce jointe ne peut pas être lue, l'indiquer explicitement dans le rapport plutôt que
 > de l'ignorer silencieusement — une pièce jointe non lue est une information manquante.
 
-## Étape 5 — Liens distants et issues liées
+## 2.4 — Liens distants et issues liées
 
 ```bash
 curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/json" \
@@ -329,41 +538,114 @@ curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/jso
 
 Conclure explicitement : le sujet a-t-il **déjà** été traité, rejeté, ou corrigé dans une version ?
 
-## Étape 6 — Investigation du code
+## Étape 3 — Sélection des repos et diagnostic — **orchestrateur**
 
-### 6.0 — Choisir les repos
+Cette étape reste chez l'orchestrateur : elle est peu volumineuse, et elle peut avoir à
+**questionner l'utilisateur** (repo requis manquant, branche approchante à confirmer), ce qu'un
+sous-agent ne sait pas faire. Elle produit le contexte exact que recevront les agents de l'étape 4 :
+**repo + branche résolue**.
 
-Lire `config.json`, confronter le symptôme aux `description`, et retenir les repos pertinents.
-Annoncer la sélection et la justifier en une ligne par repo. Commencer par le plus probable.
+### 3.1 — Choisir les repos
+
+#### Router par domaine métier
+
+`config.json` porte une table `domains` : chaque domaine décrit un périmètre fonctionnel avec ses
+`aliases` (le vocabulaire du **client**, en français, anglais et allemand), les `repos` concernés,
+des `paths`, des `i18nBundles` et des `grepSeeds`.
+
+Confronter le symptôme et le message d'erreur aux `aliases`, puis retenir le ou les domaines qui
+correspondent :
+
+```bash
+jq -r '.domains[] | "\(.name)\t\(.label)\t\(.aliases | join(" | "))"' "$SKILL_DIR/config.json"
+```
+
+Les tickets GSUPPORT arrivent dans la langue du client : c'est **son** vocabulaire qu'il faut
+reconnaître, pas le nom technique du module. « Absetzen », « discontinue » et « stopper la ligne »
+désignent le même domaine.
+
+Le domaine retenu donne les repos, et surtout les `paths` / `grepSeeds` transmis aux agents de
+l'étape 4 — c'est ce qui les empêche de partir en recherche large.
+
+> **Ce sont des indications, jamais un filtre.** Si aucun domaine ne correspond, ou si un agent ne
+> trouve rien dans les `paths` annoncés, il doit chercher au-delà. Un périmètre figé produirait des
+> `Aucun code pertinent identifié.` faussement rassurants — le pire résultat possible pour ce skill.
+>
+> Quand une analyse révèle qu'un domaine a mal routé (alias manquant, chemin obsolète, `grepSeed`
+> qui ne renvoie plus rien), **corriger `config.json` dans la foulée** et le mentionner à
+> l'utilisateur. Sans entretien, cette table sera fausse en quelques mois.
+
+#### Traduire le vocabulaire du client
+
+Un ticket client parle en jargon de service, pas en noms de classes. `config.json` porte un
+`glossary` qui fait le pont : chaque entrée donne les `terms` employés par le client, leur
+`meaning`, le `technical` correspondant et, quand elle existe, le `domain` visé.
+
+```bash
+jq -r '.glossary[] | "\(.terms | join(" / "))\t→ \(.technical)\t[\(.domain // "-")]"' \
+  "$SKILL_DIR/config.json"
+```
+
+Faire cette traduction **avant** de router et avant tout `git grep` : chercher « plan de soins »
+dans le code ne donnera jamais rien, `DirectAdministration` si. Une entrée du glossaire peut
+désigner directement un domaine, ce qui règle le routage.
+
+Comme pour les domaines, entretenir : un terme client mal compris pendant une analyse doit être
+ajouté ici dans la foulée.
+
+#### Compléter par les descriptions de repos
+
+Un ticket peut ne relever d'aucun domaine, ou déborder du sien. Confronter alors le symptôme aux
+`description` des repos, et retenir les repos pertinents. Annoncer la sélection et la justifier en
+une ligne par repo. Commencer par le plus probable.
 
 #### Repos soumis à une version
 
-Une entrée peut porter un champ `versionRange` : elle n'est alors valable que pour les versions
-correspondantes. La version de référence est **`[G] Detected in Version`**
-(`customfield_22705`, ex. `ORBIS Medication 03.17.09.02` → `3.17`) — en extraire les deux premiers
-segments :
+Un repo peut n'être valable que pour certaines versions : il porte alors un champ `versionRange`
+dans `config.json` (`>=3.22`, `<3.22`, `>=3.17 <3.22`…). **La règle est dans le fichier, pas ici** :
+ne jamais réénoncer une correspondance version → repo en dur, elle divergerait du config.
+
+La version de référence est **`[G] Detected in Version`** (`customfield_22705`, ex.
+`ORBIS Medication 03.17.09.02` → `3.17`) — en extraire les deux premiers segments :
 
 ```bash
-jq -r '.fields.customfield_22705.fields.summary // ""' /tmp/gsupport/<ISSUE_KEY>/issue.json \
-| grep -oE '[0-9]+\.[0-9]+' | head -1 | sed 's/^0*//;s/\.0*/./'
+VERSION=$(jq -r '.fields.customfield_22705.fields.summary // ""' \
+  /tmp/gsupport/<ISSUE_KEY>/issue.json \
+  | grep -oE '[0-9]+\.[0-9]+' | head -1 | sed 's/^0*//;s/\.0*/./')
 ```
 
-**Règle des repos medication legacy** — les deux repos couvrent le même périmètre selon la version,
-ne jamais fouiller les deux :
+Filtrer ensuite les repos applicables. Un repo sans `versionRange` vaut pour toutes les versions :
 
-| Version détectée | Repo à utiliser |
-|---|---|
-| **≥ 3.22** | `orme-medication-legacy` |
-| < 3.22 | `orme-global-repo` |
+```bash
+jq -r --arg v "$VERSION" '
+  def num: split(".") | (.[0]|tonumber) * 1000 + (.[1]|tonumber);
+  def sat($r): $r
+    | split(" ") | map(select(length > 0))
+    | all(
+        capture("^(?<op>>=|<=|>|<|=)(?<ver>[0-9]+\\.[0-9]+)$") as $c
+        | ($v|num) as $a | ($c.ver|num) as $b
+        | if   $c.op == ">=" then $a >= $b
+          elif $c.op == "<=" then $a <= $b
+          elif $c.op == ">"  then $a >  $b
+          elif $c.op == "<"  then $a <  $b
+          else $a == $b end
+      );
+  .repositories[]
+  | select((has("versionRange") | not) or sat(.versionRange))
+  | "\(.name)\t\(.description)"
+' "$SKILL_DIR/config.json"
+```
 
-À partir de la 3.22, `orme-global-repo` n'est plus la source de vérité : **ne pas le chercher**,
-utiliser `orme-medication-legacy`. Indiquer dans le rapport la version retenue et le repo
-correspondant.
+Deux repos aux `versionRange` complémentaires couvrent le même périmètre à des époques
+différentes : **n'en fouiller qu'un**, celui que le filtre retient. C'est aujourd'hui le cas de
+`orme-medication-legacy` et `orme-global-repo`. Indiquer dans le rapport la version retenue et le
+repo correspondant.
 
-Si la version détectée est absente ou illisible, se rabattre sur `orme-medication-legacy`
-(cas le plus courant aujourd'hui) et le signaler explicitement comme une hypothèse.
+Si la version détectée est absente ou illisible, ne pas filtrer : retenir le repo dont le
+`versionRange` couvre les versions les plus récentes, et **le signaler explicitement comme une
+hypothèse** dans le rapport.
 
-### 6.0.bis — Se placer sur la branche de la version, sans rien casser
+### 3.2 — Se placer sur la branche de la version, sans rien casser
 
 **Ne jamais chercher dans les fichiers du disque.** Les repos locaux sont sur des branches
 quelconques (ticket en cours, migration, version différente de celle du client) et peuvent porter
@@ -454,11 +736,11 @@ Interpréter chaque cas :
 | Cas | Signification | Conduite à tenir |
 |---|---|---|
 | `OK` | repo cloné et branche de la version disponible | analyser |
-| `pas de branche pour cette version` | repo cloné mais la version n'y existe pas | souvent normal (repo plus récent que la version, ou règle 3.22) — proposer la branche la plus proche et demander confirmation |
+| `pas de branche pour cette version` | repo cloné mais la version n'y existe pas | souvent normal (repo plus récent que la version, ou repo exclu par son `versionRange`) — proposer la branche la plus proche et demander confirmation |
 | `MANQUANT` | repo absent du poste | donner la commande `git clone` exacte |
 
 **Distinguer le nécessaire du superflu.** Croiser ce diagnostic avec les repos retenus à
-l'étape 6.0 : un repo manquant mais non pertinent pour ce ticket ne doit pas inquiéter
+l'étape 3.1 : un repo manquant mais non pertinent pour ce ticket ne doit pas inquiéter
 l'utilisateur. Formuler par exemple :
 
 - *« `orme-global-repo` est requis pour ce ticket (version 3.17) et il est absent :
@@ -478,8 +760,9 @@ Vérifier l'existence avant toute recherche :
 git -C "$REPO" rev-parse --verify -q "origin/<branche>" >/dev/null || echo "ABSENTE"
 ```
 
-Si la branche de la version n'existe pas dans un repo, c'est souvent **normal** : la règle 3.22
-veut que `orme-medication-legacy` n'ait pas de branche 3.17, et inversement. Dans ce cas :
+Si la branche de la version n'existe pas dans un repo, c'est souvent **normal** : un repo dont le
+`versionRange` exclut la version du client n'a par construction aucune branche pour elle. Dans ce
+cas :
 
 1. Ne pas se rabattre silencieusement sur `main/develop` — le code y est plus récent que celui du
    client et mènerait à une conclusion erronée.
@@ -492,32 +775,112 @@ veut que `orme-medication-legacy` n'ait pas de branche 3.17, et inversement. Dan
 Le rapport doit indiquer, **pour chaque repo fouillé, la branche réellement analysée**, ainsi que
 la version dont elle découle. Sans cette information, une conclusion n'est pas vérifiable.
 
+## Étape 4 — Investigation du code — **déléguée, un sous-agent par repo**
+
+Une fois les repos retenus et leur branche résolue (étape 3), lancer **un sous-agent `explore` par
+repo**, tous **en parallèle** : les repos sont indépendants, rien ne justifie de les enchaîner.
+Chacun porte le nom `code-<repo>`, avec la branche analysée dans sa `description`.
+
+Chaque agent est lancé avec le modèle et le `reasoningEffort` de `agents.codeInvestigate` : c'est
+le bloc qui demande le plus de raisonnement, et le seul où un modèle fort change réellement la
+qualité de la conclusion.
+
+Chaque agent écrit `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md` et ne renvoie qu'une synthèse
+de 30 lignes maximum.
+
+### Prompt à fournir à chaque agent
+
+L'agent est sans mémoire : sans ces éléments, il partira en recherche large, exactement ce que
+cette étape interdit. Le prompt doit contenir :
+
+| Élément | Pourquoi |
+|---|---|
+| Chemin absolu du repo et **branche résolue** (`origin/<branche>`) | il ne doit ni redeviner la branche ni toucher au working tree |
+| Version détectée du client | pour l'analyse de régression |
+| Symptôme en trois phrases + **message d'erreur exact** | son point d'entrée |
+| Les « Pistes de recherche » du `digest-jira.md` | les motifs `git grep` à essayer en premier |
+| Les `grepSeeds`, `paths` et `i18nBundles` du domaine retenu | ses points de départ vérifiés dans ce repo |
+| Le champ `i18nHint` de `config.json` | où chercher un libellé client (étape 4.1) |
+| Scénario de reproduction résumé | pour confronter la règle trouvée au cas client |
+| La chaîne de recherche 4.1 → 4.6 et les consignes de recherche ci-dessous | sa méthode |
+| Le rôle du repo (`description` de `config.json`) | pour cadrer son périmètre |
+
+Récupérer les éléments du domaine pour un repo donné :
+
+```bash
+jq -r --arg d "<domaine>" --arg r "<repo>" '
+  .domains[] | select(.name == $d)
+  | "paths:\n  " + ((.paths // []) | join("\n  "))
+  + "\ni18nBundles:\n  " + ((.i18nBundles // []) | join("\n  "))
+  + "\ngrepSeeds:\n  " + ((.grepSeeds // []) | join("\n  "))
+' "$SKILL_DIR/config.json"
+```
+
+Les `paths` d'un domaine couvrent l'ensemble de ses repos : **un chemin inexistant dans le repo
+confié à l'agent est simplement ignoré**, ce n'est pas une anomalie. Le préciser dans le prompt,
+sinon l'agent perdra du temps à s'en inquiéter.
+
+Rappeler enfin que ces éléments sont des **amorces, pas des limites** : si les `grepSeeds` ne
+donnent rien, l'agent doit élargir et consigner les motifs essayés dans ses
+`## Pistes non concluantes`.
+
+Y ajouter les consignes communes, et en particulier l'interdiction stricte de toute commande
+modifiant le repo (`checkout`, `switch`, `stash`, `worktree`, `reset`, `pull`) : ces repos sont
+ceux de l'utilisateur, avec du travail en cours dessus.
+
+### Structure du digest attendu
+
+```markdown
+# Digest code — <repo> @ origin/<branche>
+## Chaîne de raisonnement   <message d'erreur → front → REST → métier → données>
+## Fichiers retenus         <une section par fichier : chemin:lignes, rôle, extrait 10–30 lignes>
+## Condition exacte qui produit le symptôme
+## Version et régression    <la règle existe-t-elle déjà sur cette branche ? git log -S / diff>
+## Verdict du repo          <ce que ce repo établit, et ce qu'il ne permet pas de conclure>
+## Pistes non concluantes   <motifs cherchés sans résultat — évite qu'on les recherche deux fois>
+```
+
+Si l'agent ne trouve rien, il écrit `Aucun code pertinent identifié.` **et** la liste des motifs
+essayés : une recherche infructueuse documentée vaut mieux qu'un silence.
+
+### Ce que l'orchestrateur en fait
+
+Il collecte les synthèses, puis **relit les digests fichier par fichier au moment de rédiger
+l'étape 9**. Un verdict de repo qui contredit un autre est un signal fort : le dire dans la
+qualification plutôt que de trancher en silence.
+
 ### Chaîne de recherche
 
 Suivre cet ordre : chaque étape fournit le point d'entrée de la suivante. Ne pas sauter d'étape,
 ne pas partir en recherche large.
-**6.1 — Message d'erreur et libellés**
-Point d'entrée le plus efficace : le **texte exact** remonté par le client (description,
-commentaire, ou capture d'écran). Le chercher dans les bundles i18n / `resources/` pour retrouver
-sa **clé**, puis chercher cette clé dans le code.
 
-**6.2 — Écran / composant front**
+**4.1 — Message d'erreur et libellés**
+Point d'entrée le plus efficace : le **texte exact** remonté par le client (description,
+commentaire, ou capture d'écran). Le chercher dans les bundles i18n pour retrouver sa **clé**, puis
+chercher cette clé dans le code.
+
+Où chercher exactement dépend du produit : suivre le champ `i18nHint` de `config.json` et les
+`i18nBundles` du domaine plutôt que de supposer un emplacement. Sur ORME aujourd'hui, les libellés
+affichés par le front Angular viennent des `.properties` du **backend** — chercher un `fr.json`
+Angular ne donnerait rien.
+
+**4.2 — Écran / composant front**
 Si un écran est identifié : localiser le composant Angular (ou GWT) qui l'affiche, son template
 et son service.
 
-**6.3 — Point d'entrée REST**
+**4.3 — Point d'entrée REST**
 Depuis le service front : retrouver l'endpoint appelé côté back (`@Path`, `@GET`, `@POST`, DTO
 correspondant).
 
-**6.4 — Logique métier**
+**4.4 — Logique métier**
 Depuis le contrôleur : remonter aux services et **à la condition exacte qui lève l'erreur**.
 Confronter cette règle au scénario décrit par le client.
 
-**6.5 — Données / persistance**
+**4.5 — Données / persistance**
 Si le problème est lié aux données : entités JPA, requêtes, migrations, contraintes. Utiliser le
 schéma DB au `grep` si `config.json` en déclare un.
 
-**6.6 — Configuration et tests**
+**4.6 — Configuration et tests**
 Fichiers de configuration, feature flags, paramétrage client. Puis les tests existants qui
 couvrent (ou devraient couvrir) le comportement : un test qui affirme le comportement dénoncé
 oriente fortement vers « comportement attendu ».
@@ -550,12 +913,30 @@ Pour chaque fichier retenu : repo, chemin, plage de lignes, extrait (10–30 lig
 explication de son rôle dans le symptôme. Restituer le résultat comme une **chaîne de raisonnement
 traçable** (message d'erreur → front → REST → service → données), pas comme une liste de fichiers.
 
+Cette restitution va dans le **digest du repo**, pas dans la réponse de l'agent.
+
 Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser les repos fouillés.
 
-## Étape 7 — Qualification
+## Étape 5 — Qualification — **orchestrateur, jamais déléguée**
 
 C'est la section centrale du skill et sa raison d'être : décider **ce qu'est** la demande avant
 de décider quoi en faire.
+
+Elle s'appuie sur les digests produits aux étapes 2 et 4. Avant de trancher, relire les sections
+utiles : `## Symptôme` et `## Commentaires` du `digest-jira.md`, et `## Verdict du repo` de chaque
+`digest-code-<repo>.md`.
+
+Deux réflexes propres au mode délégué :
+
+- **Un digest muet n'est pas une preuve d'absence.** Si un agent a rendu `Aucun code pertinent
+  identifié.`, regarder ses `## Pistes non concluantes` : cherchait-il les bons motifs ? Si le
+  message d'erreur exact n'y figure pas, la recherche était mal amorcée — le refaire soi-même sur
+  ce motif avant de conclure.
+- **Deux verdicts de repos qui se contredisent** sont une information, pas un bruit à arbitrer en
+  silence : le mentionner dans « Éléments contradictoires ou incertains » et baisser la confiance.
+
+Abaisser également la confiance si un repo requis était absent, ou si une pièce jointe n'a pas pu
+être lue.
 
 Choisir **une** catégorie principale, avec un niveau de confiance (Élevée / Moyenne / Faible) et
 les éléments concrets qui la justifient (extrait de code, commentaire, capture, scénario) :
@@ -576,7 +957,7 @@ Toujours indiquer :
 Ne jamais conclure « bug » par défaut faute d'information : c'est le cas
 `Informations insuffisantes`.
 
-## Étape 8 — Hypothèses techniques
+## Étape 6 — Hypothèses techniques
 
 Uniquement si la catégorie est `Bug dans notre code` ou `Évolution`.
 Lister 2 à 4 hypothèses classées de la plus à la moins probable :
@@ -587,7 +968,7 @@ Lister 2 à 4 hypothèses classées de la plus à la moins probable :
 - **Correction envisagée** : changement concret
 - **Impact / risque** : effets de bord, périmètre de régression
 
-## Étape 9 — Informations manquantes et prochaines actions
+## Étape 7 — Informations manquantes et prochaines actions
 
 ### Informations manquantes
 
@@ -605,7 +986,7 @@ Sans cette table, une catégorie `Informations insuffisantes` n'est pas exploita
 - Brouillon de réponse support (ton factuel, sans jargon interne, en anglais si le ticket est en anglais).
 - Si un `ORBISBUG` ou un `HORME` est à créer : titre proposé et résumé prêt à copier.
 
-## Étape 10 — Sauvegarder le rapport
+## Étape 8 — Sauvegarder le rapport
 
 Un rapport existant n'est **jamais** écrasé : il constitue l'historique de l'analyse.
 
@@ -626,7 +1007,7 @@ done
 echo "$REPORT"
 ```
 
-Écrire le contenu de l'étape 11 dans `$REPORT`, puis afficher :
+Écrire le contenu de l'étape 9 dans `$REPORT`, puis afficher :
 
 ```
 Rapport sauvegardé : <chemin>
@@ -636,7 +1017,7 @@ Si un rapport précédent existe, le signaler et indiquer **ce qui a changé** d
 
 En cas d'échec d'écriture : afficher `Impossible de sauvegarder le rapport : <erreur>` et continuer.
 
-## Étape 11 — Structure du rapport
+## Étape 9 — Structure du rapport
 
 Même contenu dans le fichier et dans le chat.
 
@@ -714,6 +1095,7 @@ Même contenu dans le fichier et dans le chat.
 ## Investigation du code
 
 **Version de référence** : <[G] Detected in Version> → clé `<clé>`
+**Domaine métier retenu** : <domaine(s) de `config.json`, ou "aucun — routage par description de repo">
 
 | Repo | Requis | Branche analysée | Remarque |
 |---|---|---|---|
@@ -792,6 +1174,15 @@ antérieure, confirmation ou infirmation de la régression>
 - **Type** : <ORBISBUG | HORME | aucun>
 - **Titre** : <...>
 - **Résumé** : <...>
+
+## Traçabilité
+Modèles : orchestrateur `<modèle de session>` · collecte `<agents.jiraCollect.model>` ·
+code `<agents.codeInvestigate.model>`
+<mention si un modèle configuré n'était pas disponible et a été remplacé par le modèle par défaut>
+
+Digests de collecte (non versionnés, effacés au redémarrage) :
+- `/tmp/gsupport/<ISSUE_KEY>/digest-jira.md`
+- `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md`
 ```
 
 ---
@@ -807,3 +1198,4 @@ antérieure, confirmation ou infirmation de la régression>
 | Aucun commentaire | `Aucun commentaire.` |
 | Aucune piste dans le code | `Aucun code pertinent identifié.` |
 | Écriture du rapport impossible | `Impossible de sauvegarder le rapport : <erreur>` |
+| Sous-agent en échec ou sortie vide | Exécuter le bloc soi-même, sans relancer l'agent, et l'indiquer dans le rapport |

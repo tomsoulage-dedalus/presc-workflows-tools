@@ -2,6 +2,375 @@
   "_comment": "Configuration du skill gsupport-analyze. Adapter reposDir et la liste des repos a son poste. reposDir accepte le raccourci ~ ; la variable d'environnement REPOS_DIR est prioritaire sur cette valeur.",
   "reposDir": "~/work",
   "reportDir": ".copilot/analyses",
+  "_agentsComment": "Modeles des sous-agents. Adapter aux modeles auxquels on a acces : si un id est inconnu, le skill lance l'agent sans forcer de modele plutot que d'echouer. Mettre une valeur vide pour laisser le modele par defaut.",
+  "agents": {
+    "jiraCollect": {
+      "model": "claude-haiku-4.5",
+      "reasoningEffort": ""
+    },
+    "codeInvestigate": {
+      "model": "claude-opus-5",
+      "reasoningEffort": "high"
+    }
+  },
+  "orchestratorModel": {
+    "_comment": "Modeles juges suffisants pour la qualification (etape 5). Si la session tourne sur un autre modele, le skill avertit puis continue.",
+    "preferred": [
+      "claude-opus-5",
+      "claude-opus-4.8",
+      "claude-opus-4.7"
+    ]
+  },
+  "_domainsComment": "Table de routage metier : elle amorce le choix des repos (etape 3.1) et les premieres recherches des agents code (etape 4). Ce sont des INDICATIONS, jamais un filtre : un agent qui ne trouve rien dans paths doit chercher ailleurs. Entretenir au fil des tickets — un mauvais routage constate doit etre corrige ici.",
+  "i18nHint": "Les libelles affiches par le front Angular viennent des bundles .properties du backend (backend/shared/src/main/resources/com/agfa/orbis/orme/**/*_fr.properties, et equivalents dans orme-common/backend/legacy/shared). Il n'existe aucun bundle JSON de traduction Angular (fr.json, dossier i18n/) dans frontend/ : chercher un libelle client directement dans les .properties.",
+  "domains": [
+    {
+      "name": "arret-prescription",
+      "label": "Arrêt et suspension de prescription",
+      "aliases": [
+        "arrêter un traitement",
+        "stopper la ligne",
+        "arrêt de prescription",
+        "interruption de traitement",
+        "stop the treatment",
+        "discontinue medication",
+        "cancel a prescription line",
+        "Absetzen",
+        "Medikament absetzen",
+        "Therapie beenden"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "backend/orbis-impl/src/main/java/orbis/orme/prescriptionchange/control/application/**",
+        "backend/internal-api/src/main/java/orbis/orme/prescriptionchange/boundary/change/**",
+        "frontend/prescription-lib/src/domain/prescription/prescription-change/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/control/translators/PrescriptionTranslatorResources_fr.properties",
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/control/translators/PrescriptionExceptionTranslatorResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "StopPrescriptionLineService",
+        "StopPrescriptionLinesChangeDTO",
+        "StopPrescriptionLineStrategy",
+        "StopPrescriptionLineChangeService",
+        "StopDialogBox",
+        "StopPrescriptionAction",
+        "referenceDateTime"
+      ]
+    },
+    {
+      "name": "modification-prescription",
+      "label": "Modification de prescription",
+      "aliases": [
+        "modifier une prescription",
+        "changer la ligne de prescription",
+        "corriger une ordonnance",
+        "date de modification",
+        "change a prescription",
+        "edit prescription line",
+        "amend order",
+        "Verordnung ändern",
+        "Änderung der Verordnung",
+        "Anpassung"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "backend/orbis-impl/src/main/java/orbis/orme/prescriptionchange/**",
+        "backend/internal-api/src/main/java/orbis/orme/prescriptionchange/boundary/**",
+        "frontend/prescription-lib/src/component/prescription-change/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/control/translators/PrescriptionTranslatorResources_fr.properties",
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/line/model/constants/PrescriptionFieldResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "PrescriptionChangeResource",
+        "PrescriptionModificationDateDialogBox",
+        "EventBasedPrescriptionModificationBusinessService",
+        "prescriptionchange",
+        "referenceDateTime"
+      ]
+    },
+    {
+      "name": "posologie-dosage",
+      "label": "Posologie et dosage",
+      "aliases": [
+        "posologie",
+        "dose erronée",
+        "mauvais dosage",
+        "unité de dose",
+        "calcul de dose",
+        "dosage",
+        "dose value",
+        "wrong dose",
+        "dosing units",
+        "Dosierung",
+        "Dosis",
+        "Dosisberechnung"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "frontend/prescription-lib/src/domain/prescription/prescription-line/posology/**",
+        "frontend/prescription-lib/src/component/instruction/dosage/**",
+        "frontend/prescription-lib/src/component/instruction/previous-dosage-value/**",
+        "frontend/prescription-app/src/app/prescriptions-posology/**",
+        "back-end/medication-internal-api/src/main/java/orbis/orme/druginstruction/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/line/model/constants/PrescriptionFieldResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "DrugPosology",
+        "PosologyService",
+        "doseValue",
+        "SimpleDoseValueWithUnit",
+        "previous-dosage-value"
+      ]
+    },
+    {
+      "name": "plan-administration",
+      "label": "Plan et prises d'administration",
+      "aliases": [
+        "plan d'administration",
+        "prises prévues",
+        "horaires de prise",
+        "administration non tracée",
+        "plan de soins médicamenteux",
+        "administration schedule",
+        "planned takes",
+        "medication administration record",
+        "Verabreichungsplan",
+        "Gabezeiten",
+        "Applikation"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api",
+        "orme-medication-legacy"
+      ],
+      "paths": [
+        "backend/orbis-impl/src/main/java/orbis/orme/directadministration/**",
+        "frontend/prescription-lib/src/domain/prescription/direct-administration/**",
+        "frontend/prescription-lib/src/domain/prescription/prescription-line/planned-takes/**",
+        "frontend/prescription-lib/src/component/instruction/schedule/**",
+        "frontend/prescription-app/src/modules/domain/administration/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/reschedule/control/RescheduleExceptionTranslatorResources_fr.properties",
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/medikationsplan/control/MedikationsPlanTranslatorResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "DirectAdministration",
+        "PlannedTake",
+        "PrescriptionSchedule",
+        "Reschedule"
+      ]
+    },
+    {
+      "name": "prescription-si-besoin",
+      "label": "Prescription si besoin (PRN) et conditionnelle",
+      "aliases": [
+        "si besoin",
+        "à la demande",
+        "prescription conditionnelle",
+        "traitement si douleur",
+        "PRN",
+        "as needed",
+        "on demand medication",
+        "conditional order",
+        "Bedarfsmedikation",
+        "bei Bedarf",
+        "Bedarfsverordnung"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "frontend/prescription-lib/src/component/instruction/prn-form/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/line/model/constants/PrescriptionFieldResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "PrescriptionPrnForm",
+        "prescription-prn-form.service",
+        "prescription-prn-reactive-form.service",
+        "ifNeeded",
+        "prn-form"
+      ]
+    },
+    {
+      "name": "perfusion-fluides",
+      "label": "Perfusion, débit et gestion des fluides",
+      "aliases": [
+        "perfusion",
+        "débit de perfusion",
+        "vitesse de perfusion",
+        "dilution",
+        "poche de soluté",
+        "pousse-seringue",
+        "infusion rate",
+        "flow rate",
+        "IV drip",
+        "Infusion",
+        "Infusionsrate",
+        "Verdünnung"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "frontend/prescription-lib/src/component/instruction/administration-method/controlled-flow-rate/**",
+        "frontend/prescription-lib/src/component/instruction/administration-method/device/**",
+        "frontend/prescription-lib/src/component/instruction/administration-method/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/prescription/control/translators/FluidManagementTranslatorResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "FluidManagement",
+        "flowRate",
+        "Dilution",
+        "ContinuousInfusion",
+        "controlled-flow-rate"
+      ]
+    },
+    {
+      "name": "validation-pharmaceutique",
+      "label": "Validation pharmaceutique et workflow pharmacie",
+      "aliases": [
+        "validation pharmaceutique",
+        "analyse pharmaceutique",
+        "validation par le pharmacien",
+        "avis pharmacien",
+        "opinion pharmaceutique",
+        "pharmacist validation",
+        "pharmacy review",
+        "pharmaceutical validation workflow",
+        "pharmazeutische Validierung",
+        "Apothekerfreigabe",
+        "Freigabe durch Apotheke"
+      ],
+      "repos": [
+        "orme-prescription",
+        "orme-medication-legacy",
+        "orme-prescription-api"
+      ],
+      "paths": [
+        "backend/orbis-impl/src/main/java/com/agfa/orbis/orme/prescription/global/**",
+        "backend/orbis-impl/src/main/java/com/agfa/orbis/orme/prescription/domain/entities/**",
+        "08-pharmacy-workflow/**",
+        "09-medication-workflow/**"
+      ],
+      "i18nBundles": [
+        "backend/shared/src/main/resources/com/agfa/orbis/orme/worklist/business/translators/WorkListTranslatorResources_fr.properties"
+      ],
+      "grepSeeds": [
+        "PharmaValidationInfo",
+        "PharmaceuticalValidation",
+        "validatePrescription",
+        "GlobalPrescriptionResource",
+        "GlobalPrescriptionService"
+      ]
+    }
+  ],
+  "_glossaryComment": "Jargon client -> terme technique. Sert a traduire le vocabulaire d'un ticket avant de router vers un domaine et avant tout git grep. A etoffer au fil des tickets : chaque terme client mal compris lors d'une analyse doit etre ajoute ici.",
+  "glossary": [
+    {
+      "terms": [
+        "ligne de prescription",
+        "ligne",
+        "prescription line",
+        "Verordnungszeile"
+      ],
+      "meaning": "Une prescription d'un medicament pour un patient",
+      "technical": "PrescriptionLine"
+    },
+    {
+      "terms": [
+        "plan de soins",
+        "plan d'administration",
+        "MAR",
+        "Verabreichungsplan"
+      ],
+      "meaning": "Vue des prises prevues et realisees pour un patient",
+      "technical": "DirectAdministration / PlannedTake",
+      "domain": "plan-administration"
+    },
+    {
+      "terms": [
+        "prise",
+        "administration",
+        "gabe",
+        "take"
+      ],
+      "meaning": "Une occurrence d'administration d'un medicament",
+      "technical": "PlannedTake",
+      "domain": "plan-administration"
+    },
+    {
+      "terms": [
+        "si besoin",
+        "SB",
+        "PRN",
+        "bei Bedarf"
+      ],
+      "meaning": "Prescription administree seulement si une condition clinique survient",
+      "technical": "PrescriptionPrnForm / ifNeeded",
+      "domain": "prescription-si-besoin"
+    },
+    {
+      "terms": [
+        "validation pharma",
+        "VP",
+        "analyse pharmaceutique",
+        "Apothekerfreigabe"
+      ],
+      "meaning": "Controle de la prescription par un pharmacien avant dispensation",
+      "technical": "PharmaValidationInfo",
+      "domain": "validation-pharmaceutique"
+    },
+    {
+      "terms": [
+        "livret",
+        "livret therapeutique",
+        "formulaire",
+        "Arzneimittelliste"
+      ],
+      "meaning": "Referentiel des medicaments autorises dans l'etablissement",
+      "technical": "referentiel medicament (orme-medication-legacy)"
+    },
+    {
+      "terms": [
+        "PGD",
+        "parametrage",
+        "configuration client"
+      ],
+      "meaning": "Parametrage fonctionnel propre a l'etablissement",
+      "technical": "orme-pgd-config"
+    },
+    {
+      "terms": [
+        "IPP",
+        "NIP",
+        "identifiant patient"
+      ],
+      "meaning": "Identifiant permanent du patient — DONNEE PATIENT, ne jamais recopier dans le rapport",
+      "technical": "masquer par <IPP masque>"
+    }
+  ],
   "repositories": [
     {
       "name": "orme-prescription",
