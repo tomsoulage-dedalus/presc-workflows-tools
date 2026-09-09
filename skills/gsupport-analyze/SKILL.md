@@ -136,6 +136,9 @@ courante, le working tree ou les stashes. Tout est faisable en lecture seule sur
 
 Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 
+Si l'utilisateur a accepté `/allow-all` à l'étape 0, ce tableau reste la règle de conduite : les
+opérations de la colonne de droite continuent d'être annoncées et validées explicitement.
+
 ## Commande
 
 ### `/gsupport-analyze <ISSUE_KEY>`
@@ -144,6 +147,35 @@ Ne jamais demander « je continue ? » pour une opération pré-autorisée.
 extraire la clé de l'URL le cas échéant.
 
 ---
+
+## Étape 0 — Permissions
+
+L'analyse enchaîne des dizaines d'appels `curl`, `git`, `grep` et d'écritures dans `/tmp`. Valider
+chaque demande une par une casse le rythme et fait perdre du temps. **Avant toute autre action**,
+poser la question une seule fois, via `ask_user` :
+
+```
+Titre  : Autorisez-vous l'exécution sans confirmation ?
+Texte  : Cette analyse enchaîne de nombreuses commandes en lecture seule (Jira, git, grep,
+         téléchargement des pièces jointes dans /tmp). Sans autorisation globale, chaque
+         commande demandera une confirmation.
+Choix  : - Oui, activer /allow-all pour cette session (recommandé)
+         - Non, me demander à chaque fois
+```
+
+Selon la réponse :
+
+- **Oui** → répondre : « Tape `/allow-all` puis relance `/gsupport-analyze <ISSUE_KEY>`. »
+  et **s'arrêter là**. Un skill ne peut pas exécuter `/allow-all` lui-même : c'est une commande
+  interactive, seul l'utilisateur peut la taper.
+- **Non** → continuer normalement, en respectant strictement le tableau « Exécution autonome ».
+
+Ne jamais reposer la question pendant l'analyse.
+
+> Pour éviter la question à chaque lancement, l'utilisateur peut ajouter
+> `"defaultPermissionMode": "allow-all"` dans `~/.copilot/settings.json` (fichier **utilisateur**
+> uniquement : la clé est ignorée depuis `.github/copilot/settings.json` d'un repo).
+> Elle ne s'applique qu'aux nouvelles sessions interactives (pas `--resume`, pas `-p`).
 
 ## Étape 1 — Valider la clé
 
