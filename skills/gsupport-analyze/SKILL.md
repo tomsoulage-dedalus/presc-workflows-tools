@@ -1369,7 +1369,7 @@ qu'on le lui demande.
 | Un bloc passe de l'orchestrateur à un sous-agent (ou l'inverse) | § 2, § 3, et la liste « ne se délègue jamais » |
 | Nouveau fichier écrit dans `/tmp/gsupport/<KEY>/` | § 4 passage par fichiers |
 | Nouveau type de pièce jointe ou nouvelle règle d'extraction | § 5 aiguillage des pièces jointes |
-| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 6 |
+| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 6 (texte et exemples de vocabulaire, pas un schéma) |
 | Nouvelle catégorie de qualification ou nouveau garde-fou | § 7 |
 | Nouveau cas d'erreur ou de reprise | § 8 tableau de reprise sur incident |
 | Nouvelle clé structurante dans `config.json` | § 9 « ce qu'il faut entretenir », et § 2 si elle alimente une étape |

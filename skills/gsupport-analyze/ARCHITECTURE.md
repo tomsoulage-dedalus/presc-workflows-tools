@@ -139,21 +139,42 @@ l'étape 2 : c'est l'amorce des `git grep` de l'étape 4.
 
 ## 6. Étape 3 — du vocabulaire client au bon repo, sur la bonne branche
 
-```mermaid
-flowchart TD
-    SYM["Symptôme + message d'erreur<br/>dans la langue du client"]
-    SYM --> GLO["glossary<br/>terme client → terme technique"]
-    GLO --> DOM["domains<br/>aliases FR / EN / DE → repos, paths, grepSeeds"]
-    DOM --> DESC["à défaut : description des repos"]
-    DESC --> VER["[G] Detected in Version → 3.17<br/>filtre versionRange"]
-    VER --> BR["résolution de origin/&lt;branche&gt;"]
-    BR --> OUT["contrat des agents étape 4 :<br/>repo + branche + paths + grepSeeds"]
+Le client écrit « impossible de stopper la ligne ». Le code, lui, s'appelle
+`StopPrescriptionLineService`. L'étape 3 ne fait qu'une chose : cette traduction, puis elle en
+déduit où chercher.
 
-    NOTE["Indications, jamais un filtre :<br/>si rien n'est trouvé dans les paths,<br/>l'agent doit chercher au-delà"] -.-> DOM
-    FIX["Routage faux constaté<br/>→ corriger config.json dans la foulée"] -.-> DOM
+Trois questions, dans l'ordre.
 
-    style OUT fill:#e8f6ec,stroke:#2e7d4f
-```
+**1. De quel objet technique parle le client ?** → `glossary` de `config.json`
+
+| Le client dit | Le code dit |
+|---|---|
+| « la ligne », « prescription line », « Verordnungszeile » | `PrescriptionLine` |
+| « si besoin », « SB », « PRN », « bei Bedarf » | `PrescriptionPrnForm` / `ifNeeded` |
+| « validation pharma », « VP », « Apothekerfreigabe » | `PharmaValidationInfo` |
+
+**2. Quel domaine métier ?** → `domains[].aliases` (FR / EN / DE)
+
+« arrêt de prescription », « discontinue medication » et « Medikament absetzen » pointent tous le
+domaine `arret-prescription`, qui fournit les repos (`orme-prescription`, `orme-prescription-api`),
+les `paths` et les `grepSeeds` (`StopPrescriptionLineService`, `StopDialogBox`,
+`referenceDateTime`).
+
+Si aucun alias ne correspond, repli : lire la `description` de chaque repo et retenir le plus
+plausible.
+
+**3. Quelle version du produit ?** → champ `[G] Detected in Version` du ticket
+
+Ce filtre n'arbitre qu'un seul choix, celui du référentiel médicament : ticket en 3.17 →
+`orme-global-repo` (`versionRange` `<3.22`) ; ticket en 3.22 ou plus → `orme-medication-legacy`
+(`>=3.22`). Les autres repos n'ont pas de `versionRange` et sont retenus tels quels.
+
+Le résultat des trois questions est le **contrat remis à chaque agent de l'étape 4** : un repo, une
+branche `origin/<branche>` résolue, des `paths`, des `grepSeeds`.
+
+`paths` et `grepSeeds` sont des points de départ, pas un périmètre fermé : un agent qui ne trouve
+rien dedans cherche au-delà et le signale. Un routage faux constaté se corrige dans `config.json`
+dans la foulée.
 
 Deux invariants de l'étape 4 qui découlent d'ici :
 
