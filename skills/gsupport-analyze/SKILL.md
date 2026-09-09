@@ -166,9 +166,9 @@ chez l'orchestrateur.
 | Bloc | Exécutant | Sortie |
 |---|---|---|
 | Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
-| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `digest-jira.md` |
+| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `compte-rendu-jira.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
-| Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `digest-code-<repo>.md` |
+| Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `compte-rendu-code-<repo>.md` |
 | Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<ISSUE_KEY>-analyse.md` |
 
 ### Règle du passage par fichiers
@@ -198,14 +198,15 @@ train de travailler ni sur quoi. Renseigner **`name`** et **`description`** à c
 
 | Bloc | `name` | `description` |
 |---|---|---|
-| Étape 2 | `collecte-jira-<ISSUE_KEY>` | `Collecte Jira <ISSUE_KEY>` |
-| Étape 4 | `code-<repo>` | `Investigation <repo> sur <branche>` |
+| Étape 2 | `collecte-ticket-jira-<ISSUE_KEY>` | `Collecte Jira <ISSUE_KEY>` |
+| Étape 4 | `investigation-code-<repo>` | `Investigation <repo> sur <branche>` |
 
-Exemples : `collecte-jira-GSUPPORT-47944`, `code-orme-prescription` avec la description
-`Investigation orme-prescription sur 317XXXX/develop`.
+Exemples : `collecte-ticket-jira-GSUPPORT-47944`, `investigation-code-orme-prescription` avec la
+description `Investigation orme-prescription sur 317XXXX/develop`.
 
-Le nom porte **le repo, pas un numéro** : `code-1`, `code-2` ne dit rien quand trois agents
-tournent ensemble. Quand un digest sera relu à l'étape 5, c'est par ce nom qu'on le retrouvera.
+Le nom porte **le repo, pas un numéro** : `investigation-code-1`, `investigation-code-2` ne dit
+rien quand trois agents tournent ensemble. Quand un compte rendu sera relu à l'étape 5, c'est par ce nom
+qu'on le retrouvera.
 
 ### Consignes communes à tous les sous-agents
 Les sous-agents sont **sans mémoire** : chaque prompt doit être autoportant. Y inclure
@@ -216,7 +217,7 @@ systématiquement :
 - le rappel du masquage des données patient (`Contains PID`),
 - la contrainte de sortie : écrire le fichier, ne renvoyer qu'une synthèse ≤ 30 lignes,
 - l'interdiction absolue de `git checkout` / `switch` / `stash` / `worktree` / `reset` / `pull`,
-- l'interdiction de poser une question : en cas de blocage, l'écrire dans le digest et rendre la
+- l'interdiction de poser une question : en cas de blocage, l'écrire dans le compte rendu et rendre la
   main.
 
 Si un sous-agent échoue ou rend une sortie vide, **ne pas le relancer une seconde fois** :
@@ -276,14 +277,14 @@ action de l'utilisateur.
 ## Étape 0 — Valider la clé
 
 ```
-Si aucune clé n'a pu être résolue :
+Si aucune clé n'a pu être résolue, ou si ce qui a été fourni n'est pas au format
+GSUPPORT-<chiffres> (autre préfixe, numéro manquant, saisie libre) :
   → demander via `ask_user` : « Quel ticket GSUPPORT veux-tu analyser ? (ex. GSUPPORT-47944) »
-  → accepter une clé nue ou une URL Jira
+  → accepter une clé nue ou une URL Jira, puis revalider
+  → si la nouvelle saisie est un ticket HORME-/ORBISBUG-, indiquer que ce skill traite
+    uniquement les GSUPPORT et rediriger vers /task-analyze, puis arrêter
 
-Si la clé ne commence pas par "GSUPPORT-" :
-  → afficher "Préfixe inattendu. Ce skill traite uniquement les tickets GSUPPORT-XXXXX.
-     Pour HORME-/ORBISBUG-, utiliser /task-analyze."
-  → arrêter
+Sinon : passer directement à l'étape 1.
 ```
 
 ## Étape 1 — Permissions
@@ -401,25 +402,25 @@ d'élargir plutôt que d'appliquer la restriction en silence.
 ## Étape 2 — Collecte Jira — **déléguée à un sous-agent**
 
 Ce bloc produit le gros du volume brut (JSON complet, commentaires, pièces jointes). Il est confié
-à **un seul sous-agent** de type `explore`, nommé `collecte-jira-<ISSUE_KEY>` et lancé avec le
+à **un seul sous-agent** de type `explore`, nommé `collecte-ticket-jira-<ISSUE_KEY>` et lancé avec le
 modèle `agents.jiraCollect` de `config.json`. Il écrit
-`/tmp/gsupport/<ISSUE_KEY>/digest-jira.md` et ne renvoie qu'une synthèse.
+`/tmp/gsupport/<ISSUE_KEY>/compte-rendu-jira.md` et ne renvoie qu'une synthèse.
 
 > **Pièces jointes et images** — le sous-agent doit pouvoir ouvrir des images avec l'outil `view`.
-> S'il n'en est pas capable, il l'écrit dans le digest (`images non exploitées par l'agent`) et
+> S'il n'en est pas capable, il l'écrit dans le compte rendu (`images non exploitées par l'agent`) et
 > l'orchestrateur les regarde lui-même après coup, sans relancer tout le bloc.
 
 > **Archives** — toute pièce jointe `.zip`/`.tar.gz`/`.7z`/`.rar` doit être décompressée et son
-> contenu lu fichier par fichier (voir 2.3.1). Le digest doit lister les fichiers extraits ; une
+> contenu lu fichier par fichier (voir 2.3.1). Le compte rendu doit lister les fichiers extraits ; une
 > archive restée fermée est un échec de l'étape 2.
 
 ### Prompt à fournir au sous-agent
 
 Y reprendre intégralement les sections 2.1 à 2.4 ci-dessous (elles sont le contrat de l'agent),
-plus les consignes communes, et exiger cette structure de digest :
+plus les consignes communes, et exiger cette structure de compte rendu :
 
 ```markdown
-# Digest Jira — <ISSUE_KEY>
+# Compte rendu Jira — <ISSUE_KEY>
 ## Champs        <tableau des champs standards et GSUPPORT>
 ## Symptôme      <description reformatée, scénario, résultat actuel/attendu, message d'erreur exact>
 ## Commentaires  <synthèse chronologique : auteur, date, apport>
@@ -441,7 +442,7 @@ trois phrases, message d'erreur exact, pistes de recherche, et ce qui n'a pas pu
 
 ### Ce que l'orchestrateur en fait
 
-Lire la synthèse, puis ne relire dans `digest-jira.md` que les sections nécessaires à l'étape
+Lire la synthèse, puis ne relire dans `compte-rendu-jira.md` que les sections nécessaires à l'étape
 concernée. Ne jamais charger `issue.json` ni `comments.json` dans le contexte de l'orchestrateur :
 ils restent sur disque, à disposition d'un `jq` ciblé si un champ précis manque.
 
@@ -648,7 +649,7 @@ Règles :
 
   puis lire les blocs de contexte autour des hits pertinents (`grep -n -A 30`).
 - **Archive protégée par mot de passe ou outil manquant** (`7z`, `unrar`) : le signaler
-  explicitement dans le digest et dans le rapport (`Archive non décompressée : <nom> — <raison>`),
+  explicitement dans le compte rendu et dans le rapport (`Archive non décompressée : <nom> — <raison>`),
   ne jamais l'ignorer silencieusement.
 - Dans le rapport, chaque archive donne une entrée listant **les fichiers qu'elle contenait** et
   ce que chacun apporte.
@@ -925,7 +926,7 @@ Chaque agent est lancé avec le modèle et le `reasoningEffort` de `agents.codeI
 le bloc qui demande le plus de raisonnement, et le seul où un modèle fort change réellement la
 qualité de la conclusion.
 
-Chaque agent écrit `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md` et ne renvoie qu'une synthèse
+Chaque agent écrit `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-code-<repo>.md` et ne renvoie qu'une synthèse
 de 30 lignes maximum.
 
 ### Prompt à fournir à chaque agent
@@ -938,7 +939,7 @@ cette étape interdit. Le prompt doit contenir :
 | Chemin absolu du repo et **branche résolue** (`origin/<branche>`) | il ne doit ni redeviner la branche ni toucher au working tree |
 | Version détectée du client | pour l'analyse de régression |
 | Symptôme en trois phrases + **message d'erreur exact** | son point d'entrée |
-| Les « Pistes de recherche » du `digest-jira.md` | les motifs `git grep` à essayer en premier |
+| Les « Pistes de recherche » du `compte-rendu-jira.md` | les motifs `git grep` à essayer en premier |
 | Les `grepSeeds`, `paths` et `i18nBundles` du domaine retenu | ses points de départ vérifiés dans ce repo |
 | Le champ `i18nHint` de `config.json` | où chercher un libellé client (étape 4.1) |
 | Scénario de reproduction résumé | pour confronter la règle trouvée au cas client |
@@ -969,10 +970,10 @@ Y ajouter les consignes communes, et en particulier l'interdiction stricte de to
 modifiant le repo (`checkout`, `switch`, `stash`, `worktree`, `reset`, `pull`) : ces repos sont
 ceux de l'utilisateur, avec du travail en cours dessus.
 
-### Structure du digest attendu
+### Structure du compte rendu attendu
 
 ```markdown
-# Digest code — <repo> @ origin/<branche>
+# Compte rendu code — <repo> @ origin/<branche>
 ## Chaîne de raisonnement   <message d'erreur → front → REST → métier → données>
 ## Fichiers retenus         <une section par fichier : chemin:lignes, rôle, extrait 10–30 lignes>
 ## Condition exacte qui produit le symptôme
@@ -986,7 +987,7 @@ essayés : une recherche infructueuse documentée vaut mieux qu'un silence.
 
 ### Ce que l'orchestrateur en fait
 
-Il collecte les synthèses, puis **relit les digests fichier par fichier au moment de rédiger
+Il collecte les synthèses, puis **relit les comptes rendus fichier par fichier au moment de rédiger
 l'étape 9**. Un verdict de repo qui contredit un autre est un signal fort : le dire dans la
 qualification plutôt que de trancher en silence.
 
@@ -1054,7 +1055,7 @@ Pour chaque fichier retenu : repo, chemin, plage de lignes, extrait (10–30 lig
 explication de son rôle dans le symptôme. Restituer le résultat comme une **chaîne de raisonnement
 traçable** (message d'erreur → front → REST → service → données), pas comme une liste de fichiers.
 
-Cette restitution va dans le **digest du repo**, pas dans la réponse de l'agent.
+Cette restitution va dans le **compte rendu du repo**, pas dans la réponse de l'agent.
 
 Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser les repos fouillés.
 
@@ -1063,13 +1064,13 @@ Si rien n'est trouvé : écrire `Aucun code pertinent identifié.` et préciser 
 C'est la section centrale du skill et sa raison d'être : décider **ce qu'est** la demande avant
 de décider quoi en faire.
 
-Elle s'appuie sur les digests produits aux étapes 2 et 4. Avant de trancher, relire les sections
-utiles : `## Symptôme` et `## Commentaires` du `digest-jira.md`, et `## Verdict du repo` de chaque
-`digest-code-<repo>.md`.
+Elle s'appuie sur les comptes rendus produits aux étapes 2 et 4. Avant de trancher, relire les sections
+utiles : `## Symptôme` et `## Commentaires` du `compte-rendu-jira.md`, et `## Verdict du repo` de chaque
+`compte-rendu-code-<repo>.md`.
 
 Deux réflexes propres au mode délégué :
 
-- **Un digest muet n'est pas une preuve d'absence.** Si un agent a rendu `Aucun code pertinent
+- **Un compte rendu muet n'est pas une preuve d'absence.** Si un agent a rendu `Aucun code pertinent
   identifié.`, regarder ses `## Pistes non concluantes` : cherchait-il les bons motifs ? Si le
   message d'erreur exact n'y figure pas, la recherche était mal amorcée — le refaire soi-même sur
   ce motif avant de conclure.
@@ -1325,8 +1326,8 @@ code `<agents.codeInvestigate.model>`
 <mention si un modèle configuré n'était pas disponible et a été remplacé par le modèle par défaut>
 
 Digests de collecte (non versionnés, effacés au redémarrage) :
-- `/tmp/gsupport/<ISSUE_KEY>/digest-jira.md`
-- `/tmp/gsupport/<ISSUE_KEY>/digest-code-<repo>.md`
+- `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-jira.md`
+- `/tmp/gsupport/<ISSUE_KEY>/compte-rendu-code-<repo>.md`
 ```
 
 ---

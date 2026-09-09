@@ -38,19 +38,19 @@ flowchart TD
     end
 
     subgraph SUB2["Étape 2 — sous-agent (modèle rapide)"]
-        A2["collecte-jira-KEY"]
+        A2["collecte-ticket-jira-GSUPPORT-XXXXX"]
     end
 
     subgraph SUB4["Étape 4 — 1 sous-agent par repo, en parallèle (modèle fort)"]
-        A4A["code-repo-A"]
-        A4B["code-repo-B"]
-        A4C["code-repo-C"]
+        A4A["investigation-code-repo-A"]
+        A4B["investigation-code-repo-B"]
+        A4C["investigation-code-repo-C"]
     end
 
     E0 --> E1 --> E1B --> A2
-    A2 -->|digest-jira.md| E3
+    A2 -->|compte-rendu-jira.md| E3
     E3 --> A4A & A4B & A4C
-    A4A & A4B & A4C -->|digest-code-repo.md| E5
+    A4A & A4B & A4C -->|compte-rendu-code-repo.md| E5
     E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
 
     CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
@@ -67,9 +67,9 @@ flowchart TD
 | Bloc | Exécutant | Sortie |
 |---|---|---|
 | Étapes 0, 1, 1b — résolution et validation de la clé, permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
-| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `digest-jira.md` |
+| Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `compte-rendu-jira.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
-| Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `digest-code-<repo>.md` |
+| Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `compte-rendu-code-<repo>.md` |
 | Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<KEY>-analyse.md` |
 
 Ne se délègue **jamais** :
@@ -85,8 +85,8 @@ flowchart LR
     subgraph TMP["/tmp/gsupport/&lt;KEY&gt;/ — matière brute, jetable"]
         J["issue.json<br/>comments.json<br/>remotelink.json"]
         PJ["pièces jointes<br/>extracted/&lt;archive&gt;/..."]
-        DJ["digest-jira.md"]
-        DC["digest-code-&lt;repo&gt;.md"]
+        DJ["compte-rendu-jira.md"]
+        DC["compte-rendu-code-&lt;repo&gt;.md"]
     end
 
     A2["Sous-agent Jira"] --> J --> PJ --> DJ
@@ -102,7 +102,7 @@ flowchart LR
 ```
 
 Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice du découpage.
-L'orchestrateur ne relit jamais un digest entier d'un coup, et jamais le JSON brut.
+L'orchestrateur ne relit jamais un compte rendu entier d'un coup, et jamais le JSON brut.
 
 ## 5. Étape 2 en détail — lecture exhaustive des pièces jointes
 
@@ -126,14 +126,14 @@ flowchart TD
     LOOP -->|non| T2["chaque fichier extrait<br/>repasse par le même aiguillage"]
     T2 --> T
 
-    IMG & DOC & XLS & PDF & LOG --> D["digest-jira.md<br/>+ ## Pistes de recherche"]
+    IMG & DOC & XLS & PDF & LOG --> D["compte-rendu-jira.md<br/>+ ## Pistes de recherche"]
     KO["illisible / protégé /<br/>outil absent"] --> SIG["signalé explicitement<br/>jamais ignoré"]
 
     style ARC fill:#fff4e0,stroke:#b8860b,stroke-width:2px
     style SIG fill:#fde2e2,stroke:#c0392b
 ```
 
-La section `## Pistes de recherche` du digest (3 à 8 chaînes exactes : message d'erreur, libellé
+La section `## Pistes de recherche` du compte rendu (3 à 8 chaînes exactes : message d'erreur, libellé
 d'écran, code, nom de bouton, classe d'une stacktrace) est le livrable le plus important de
 l'étape 2 : c'est l'amorce des `git grep` de l'étape 4.
 
@@ -167,8 +167,8 @@ Deux invariants de l'étape 4 qui découlent d'ici :
 
 ```mermaid
 flowchart TD
-    IN1["digest-jira.md<br/>## Symptôme, ## Commentaires"] --> Q
-    IN2["digest-code-*.md<br/>## Verdict du repo"] --> Q
+    IN1["compte-rendu-jira.md<br/>## Symptôme, ## Commentaires"] --> Q
+    IN2["compte-rendu-code-*.md<br/>## Verdict du repo"] --> Q
     Q{"Qualification<br/>1 catégorie + confiance"}
 
     Q --> C1["Bug dans notre code → ORBISBUG"]
@@ -177,7 +177,7 @@ flowchart TD
     Q --> C4["Évolution → HORME"]
     Q --> C5["Informations insuffisantes → questions au client"]
 
-    G1["Digest muet ≠ preuve d'absence :<br/>vérifier ## Pistes non concluantes,<br/>refaire la recherche si le motif exact manque"] -.-> Q
+    G1["Compte rendu muet ≠ preuve d'absence :<br/>vérifier ## Pistes non concluantes,<br/>refaire la recherche si le motif exact manque"] -.-> Q
     G2["Verdicts contradictoires, repo absent,<br/>PJ ou archive illisible → baisser la confiance"] -.-> Q
     G3["Ne jamais conclure « bug » par défaut<br/>faute d'information"] -.-> Q
 
