@@ -24,9 +24,10 @@ export JIRA_DOMAIN="jira.dedalus.com"
 export JIRA_API_TOKEN="<PAT Jira Server personnel>"
 ```
 
-**2. Chemins des repos** — éditer `reposDir` dans `config.json` (voir ci-dessous) et retirer les
-repos absents du poste. Alternative sans modifier le fichier : exporter `REPOS_DIR`, qui a la
-priorité sur `config.json`.
+**2. Chemins des repos** — au premier lancement, si les repos ne sont pas trouvés, le skill
+**demande où ils se trouvent** et propose d'enregistrer la réponse dans `config.json`. Rien à
+préparer donc, mais il reste possible de renseigner `reposDir` à l'avance, ou d'exporter
+`REPOS_DIR` qui est prioritaire.
 
 **3. Lier le skill** : `bash skills/setup.sh` depuis la racine de `presc-workflows-tools`.
 
@@ -52,24 +53,55 @@ ne jamais les supposer.
 SKILL_DIR=$(dirname "$(readlink -f ~/.copilot/skills/gsupport-analyze/SKILL.md)")
 
 # reposDir vient de config.json ; la variable d'environnement REPOS_DIR reste prioritaire.
-REPOS_DIR="${REPOS_DIR:-$(jq -r '.reposDir' "$SKILL_DIR/config.json")}"
+REPOS_DIR="${REPOS_DIR:-$(jq -r '.reposDir // ""' "$SKILL_DIR/config.json")}"
 REPOS_DIR="${REPOS_DIR/#\~/$HOME}"
 
-# Repli si le dossier configure n'existe pas sur ce poste.
-if [ ! -d "$REPOS_DIR" ]; then
-  for candidate in "$HOME/work" "$HOME/repos" "$HOME/dev"; do
-    [ -d "$candidate" ] && REPOS_DIR="$candidate" && break
+# Un dossier n'est valide que s'il contient au moins un des repos declares.
+is_valid_repos_dir() {
+  [ -d "$1" ] || return 1
+  jq -r '.repositories[].path' "$SKILL_DIR/config.json" \
+    | while read -r p; do [ -d "$1/$p" ] && echo found; done | grep -q found
+}
+
+if is_valid_repos_dir "$REPOS_DIR"; then
+  echo "reposDir : $REPOS_DIR"
+else
+  echo "INTROUVABLE : $REPOS_DIR"
+  # Pistes a proposer a l'utilisateur.
+  for candidate in "$HOME/work" "$HOME/repos" "$HOME/dev" "$HOME/SourceRepo"; do
+    is_valid_repos_dir "$candidate" && echo "candidat : $candidate"
   done
 fi
-echo "reposDir : $REPOS_DIR"
-
-jq -r '.repositories[] | "\(.name)\t\(.description)"' "$SKILL_DIR/config.json"
 ```
 
-Si le repli a dû s'appliquer, **le signaler** à l'utilisateur et lui suggérer de corriger
-`reposDir` dans `config.json`. Si aucun candidat n'existe, afficher
-`Aucun dossier de repos trouvé — renseigner reposDir dans config.json` et poursuivre l'analyse
-sans investigation de code plutôt que d'échouer.
+**Si le dossier est introuvable ou ne contient aucun repo déclaré : demander à l'utilisateur.**
+Ne jamais deviner silencieusement, et ne jamais poursuivre l'investigation de code sur un chemin
+non confirmé — une recherche dans le vide produirait une conclusion fausse.
+
+1. Poser la question avec l'outil `ask_user`, en proposant les candidats détectés ci-dessus comme
+   choix, plus une saisie libre :
+   *« Où se trouvent tes repos ORME ? Le chemin configuré `<reposDir>` est introuvable. »*
+2. Valider la réponse avec `is_valid_repos_dir`. Si elle ne contient aucun repo déclaré, le dire
+   et redemander **une** fois.
+3. Une fois le chemin validé, **proposer de l'enregistrer** dans `config.json` pour ne plus avoir
+   à le demander (écriture sur un fichier existant → confirmation requise) :
+
+   ```bash
+   tmp=$(mktemp)
+   jq --arg d "$REPOS_DIR" '.reposDir = $d' "$SKILL_DIR/config.json" > "$tmp" \
+     && mv "$tmp" "$SKILL_DIR/config.json"
+   ```
+
+4. Si l'utilisateur décline la question ou n'a pas les repos en local : poursuivre l'analyse Jira
+   **sans** investigation de code, et l'indiquer clairement dans le rapport
+   (`Investigation du code non réalisée : repos non disponibles`) plutôt que de conclure
+   `Aucun code pertinent identifié.`, qui serait trompeur.
+
+Lister les repos disponibles une fois `REPOS_DIR` validé :
+
+```bash
+jq -r '.repositories[] | "\(.name)\t\(.description)"' "$SKILL_DIR/config.json"
+```
 
 Un ticket GSUPPORT ne se limite presque jamais au repo courant : le message d'erreur peut venir
 de `orme-prescription-api`, un libellé de `orme-common`, une règle historique de
