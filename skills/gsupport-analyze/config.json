@@ -1,0 +1,51 @@
+{
+  "_comment": "Configuration du skill gsupport-analyze. Adapter reposDir et la liste des repos a son poste. reposDir accepte le raccourci ~ ; la variable d'environnement REPOS_DIR est prioritaire sur cette valeur.",
+  "reposDir": "~/work",
+  "reportDir": ".copilot/analyses",
+  "repositories": [
+    {
+      "name": "orme-prescription",
+      "path": "orme-prescription",
+      "url": "git@github.com:dedalus-cis4u/orme-prescription.git",
+      "description": "Prescription et administration medicamenteuse — back Java/Jakarta EE (backend/), front Angular (frontend/) et front GWT legacy. Coeur des tickets prescription : lignes de prescription, arret, pause, modification, plan d'administration."
+    },
+    {
+      "name": "orme-prescription-api",
+      "path": "orme-prescription-api",
+      "url": "git@github.com:dedalus-cis4u/orme-prescription-api.git",
+      "description": "API/contrats exposes par le module prescription (back-end/) — DTO, endpoints REST, regles de validation partagees. A regarder des qu'une erreur remonte d'un appel REST."
+    },
+    {
+      "name": "orme-common",
+      "path": "orme-common",
+      "url": "git@github.com:dedalus-cis4u/orme-common.git",
+      "description": "Briques transverses ORME — back Java, front Angular, resources partagees (dont i18n communs). A chercher quand un libelle ou une regle n'est pas trouve dans le module fonctionnel."
+    },
+    {
+      "name": "orme-medication-legacy",
+      "path": "orme-medication-legacy",
+      "url": "git@github.com:dedalus-cis4u/orme-medication-legacy.git",
+      "description": "Services medication historiques iPharma (livret, formulaire, pharmacy-workflow, medication-workflow, ipharma-core, loc FR). Remplace orme-global-repo a partir de la version 3.22 : referentiel produit, workflows pharmacie et comportements anterieurs a la reprise Angular.",
+      "versionRange": ">=3.22"
+    },
+    {
+      "name": "orme-global-repo",
+      "path": "orme-global-repo",
+      "url": "git@github.com:dedalus-cis4u/orme-global-repo.git",
+      "description": "Ancien agregat medicationNG + modules iPharma (dont ipharma-db). Valable uniquement pour les versions anterieures a 3.22 — au-dela, utiliser orme-medication-legacy.",
+      "versionRange": "<3.22"
+    },
+    {
+      "name": "orme-pgd-config",
+      "path": "orme-pgd-config",
+      "url": "git@github.com:dedalus-cis4u/orme-pgd-config.git",
+      "description": "Configuration et parametrage PGD — back Java, front Angular. A regarder en priorite quand l'hypothese est un probleme de configuration client plutot qu'un bug de code."
+    },
+    {
+      "name": "orme-medication-packaging",
+      "path": "orme-medication-packaging",
+      "url": "git@github.com:dedalus-cis4u/orme-medication-packaging.git",
+      "description": "Packaging, deploiement et DML (dml/, internal-dml/). Utile pour verifier ce qui est reellement livre dans une version donnee ([G] Detected in Version)."
+    }
+  ]
+}
