@@ -3,8 +3,10 @@
 # =============================================================================
 # update-lib.sh
 #
-# Met à jour une dépendance npm choisie dans prescription-app et prescription-lib
-# et crée un commit dédié.
+# Met à jour une ou plusieurs dépendances npm choisies dans prescription-app et
+# prescription-lib. Chaque lib fait l'objet d'un commit dédié sur la même
+# branche : après chaque commit, l'utilisateur peut choisir d'enchaîner avec
+# une autre lib avant de passer au push / à la création de la PR.
 #
 # Usage : ./update-lib.sh [--bug BUG_ID] [--lib LIB_NAME] [--test]
 #
@@ -12,10 +14,12 @@
 #   --bug BUG_ID    (optionnel) Identifiant du bug (ex: ORBISBUG-135) ou suffixe
 #                   de branche libre (ex: eknit-update-version). Sans ce
 #                   paramètre, il est demandé interactivement (aucun format requis).
-#   --lib LIB_NAME  (optionnel) Nom exact de la dépendance npm à mettre à jour.
-#                   Sans ce paramètre, une liste interactive est présentée.
+#   --lib LIB_NAME  (optionnel) Nom exact de la dépendance npm à mettre à jour
+#                   pour le premier commit. Sans ce paramètre, une liste
+#                   interactive est présentée. Les libs suivantes (si l'utilisateur
+#                   choisit d'en ajouter) sont toujours sélectionnées interactivement.
 #   --test          (optionnel) Enchaîne npm install, vérification du proxy et
-#                   démarrage de l'application après le commit.
+#                   démarrage de l'application après le(s) commit(s).
 #
 # Comportement selon BUG_ID (fourni via --bug ou saisi interactivement) :
 #   - Préfixe connu (ORBISBUG, HDEFECT, HORME) : branche presc/bugfix/<BUG_ID>,
@@ -23,8 +27,8 @@
 #   - Préfixe inconnu / format libre : branche presc/quality/<BUG_ID>,
 #     commit "chore(deps)".
 #
-# Après le commit, l'utilisateur est interrogé pour pousser la branche et créer
-# une Pull Request GitHub (nécessite GITHUB_TOKEN ou 'gh auth login').
+# Après le(s) commit(s), l'utilisateur est interrogé pour pousser la branche et
+# créer une Pull Request GitHub (nécessite GITHUB_TOKEN ou 'gh auth login').
 #
 # Le script doit être lancé depuis un dépôt contenant frontend/prescription-app
 # et frontend/prescription-lib (ex: orme-prescription).
@@ -154,15 +158,18 @@ else
 fi
 print_info "BUG_ID : ${BOLD}${BUG_ID}${NC} → branche ${BRANCH_TYPE}, commit \"${COMMIT_PREFIX}\""
 
-# ---- Step 1b — Sélection de la lib (si --lib absent) --------------------------
+# ---- Fonction — Sélection interactive d'une lib -------------------------------
+#
+# Affiche la liste des dépendances de prescription-app / prescription-lib, en
+# excluant celles déjà mises à jour dans ce run (tableau global ALREADY_UPDATED),
+# et place le choix de l'utilisateur dans la variable globale LIB_NAME.
 
-if [ -z "$LIB_NAME" ]; then
-    print_title "Step 1b — Sélection de la lib"
-
+select_lib_interactive() {
     LIB_LIST_OUTPUT=$(node -e "
       const app = require('./${APP_PKG}').dependencies || {};
       const lib = require('./${LIB_PKG}').dependencies || {};
-      const all = [...new Set([...Object.keys(app), ...Object.keys(lib)])].sort();
+      const exclude = new Set(process.argv.slice(1));
+      const all = [...new Set([...Object.keys(app), ...Object.keys(lib)])].filter(k => !exclude.has(k)).sort();
       const common  = all.filter(k => k in app && k in lib);
       const appOnly = all.filter(k => k in app && !(k in lib));
       const libOnly = all.filter(k => !(k in app) && k in lib);
@@ -184,13 +191,14 @@ if [ -z "$LIB_NAME" ]; then
       console.log(lines.join('\n'));
       console.log('---NAMES---');
       console.log(ordered.join('\n'));
-    ")
+    " "${ALREADY_UPDATED[@]}")
 
     LIB_DISPLAY=$(echo "$LIB_LIST_OUTPUT" | sed -n '1,/---NAMES---/p' | sed '$d')
     LIB_NAMES_ORDERED=$(echo "$LIB_LIST_OUTPUT" | sed -n '/---NAMES---/,$p' | tail -n +2)
 
     mapfile -t LIB_ARRAY <<< "$LIB_NAMES_ORDERED"
 
+    LIB_NAME=""
     while [ -z "$LIB_NAME" ]; do
         echo ""
         echo "📋 Dépendances disponibles :"
@@ -214,6 +222,15 @@ if [ -z "$LIB_NAME" ]; then
             print_error "Choix invalide."
         fi
     done
+}
+
+ALREADY_UPDATED=()
+
+# ---- Step 1b — Sélection de la lib (si --lib absent) --------------------------
+
+if [ -z "$LIB_NAME" ]; then
+    print_title "Step 1b — Sélection de la lib"
+    select_lib_interactive
 fi
 print_info "Lib sélectionnée : ${BOLD}${LIB_NAME}${NC}"
 
@@ -311,79 +328,127 @@ print_success "Branche '${BASE_BRANCH}' mise à jour depuis origin."
 git checkout -b "${NEW_BRANCH}" "${BASE_BRANCH}"
 print_success "Branche créée : ${NEW_BRANCH} (depuis ${BASE_BRANCH})"
 
-# ---- Step 3 — Mettre à jour la lib ---------------------------------------------
+# ---- Step 3 & 4 — Mettre à jour la/les lib(s) et créer un commit par lib ------
+#
+# Chaque lib choisie fait l'objet d'un commit dédié. Une fois le commit créé,
+# l'utilisateur peut choisir d'enchaîner avec une autre lib (nouveau commit)
+# avant de passer au push / à la création de la PR.
 
-print_title "Step 3 — Mettre à jour la lib"
+ALL_LIB_NAMES=()
+ALL_COMMIT_MSGS=()
+ALL_UPDATE_SCOPES=()
+UPDATE_APP_ANY=false
+UPDATE_LIB_PKG_ANY=false
 
-PRESENCE=$(node -e "
-  const app = require('./${APP_PKG}').dependencies || {};
-  const lib = require('./${LIB_PKG}').dependencies || {};
-  const inApp = '${LIB_NAME}' in app;
-  const inLib = '${LIB_NAME}' in lib;
-  if (inApp && inLib) console.log('both');
-  else if (inApp)     console.log('app-only');
-  else if (inLib)     console.log('lib-only');
-  else                console.log('none');
-")
+FIRST_LIB=true
+while true; do
+    if [ "$FIRST_LIB" = false ]; then
+        print_title "Step 3 — Sélection d'une lib supplémentaire"
+        select_lib_interactive
+        print_info "Lib sélectionnée : ${BOLD}${LIB_NAME}${NC}"
+    fi
+    FIRST_LIB=false
 
-UPDATE_APP=false
-UPDATE_LIB_PKG=false
-case "$PRESENCE" in
-    none)
-        print_error "${LIB_NAME} introuvable dans les dépendances de prescription-app ni de prescription-lib."
+    print_title "Step 3 — Mettre à jour ${LIB_NAME}"
+
+    PRESENCE=$(node -e "
+      const app = require('./${APP_PKG}').dependencies || {};
+      const lib = require('./${LIB_PKG}').dependencies || {};
+      const inApp = '${LIB_NAME}' in app;
+      const inLib = '${LIB_NAME}' in lib;
+      if (inApp && inLib) console.log('both');
+      else if (inApp)     console.log('app-only');
+      else if (inLib)     console.log('lib-only');
+      else                console.log('none');
+    ")
+
+    UPDATE_APP=false
+    UPDATE_LIB_PKG=false
+    case "$PRESENCE" in
+        none)
+            print_error "${LIB_NAME} introuvable dans les dépendances de prescription-app ni de prescription-lib."
+            exit 1
+            ;;
+        app-only)
+            print_warning "${LIB_NAME} n'existe que dans prescription-app (absent de prescription-lib)."
+            UPDATE_APP=true
+            ;;
+        lib-only)
+            print_warning "${LIB_NAME} n'existe que dans prescription-lib (absent de prescription-app)."
+            UPDATE_LIB_PKG=true
+            ;;
+        both)
+            UPDATE_APP=true
+            UPDATE_LIB_PKG=true
+            ;;
+    esac
+
+    if [ "$UPDATE_APP" = true ]; then
+        (cd frontend/prescription-app && npm update "${LIB_NAME}")
+        print_success "npm update ${LIB_NAME} — OK dans frontend/prescription-app"
+    fi
+    if [ "$UPDATE_LIB_PKG" = true ]; then
+        (cd frontend/prescription-lib && npm update "${LIB_NAME}")
+        print_success "npm update ${LIB_NAME} — OK dans frontend/prescription-lib"
+    fi
+
+    # ---- Step 4 — Créer le commit ----------------------------------------------
+
+    print_title "Step 4 — Créer le commit"
+
+    COMMIT_PATHS=()
+    if [ "$UPDATE_APP" = true ]; then
+        git add frontend/prescription-app/package-lock.json
+        COMMIT_PATHS+=("frontend/prescription-app/package-lock.json")
+    fi
+    if [ "$UPDATE_LIB_PKG" = true ]; then
+        git add frontend/prescription-lib/package-lock.json
+        COMMIT_PATHS+=("frontend/prescription-lib/package-lock.json")
+    fi
+
+    if git diff --cached --quiet -- "${COMMIT_PATHS[@]}"; then
+        print_warning "Aucun changement détecté dans les package-lock.json après npm update."
+        print_warning "${LIB_NAME} est peut-être déjà à jour."
         exit 1
-        ;;
-    app-only)
-        print_warning "${LIB_NAME} n'existe que dans prescription-app (absent de prescription-lib)."
-        UPDATE_APP=true
-        ;;
-    lib-only)
-        print_warning "${LIB_NAME} n'existe que dans prescription-lib (absent de prescription-app)."
-        UPDATE_LIB_PKG=true
-        ;;
-    both)
-        UPDATE_APP=true
-        UPDATE_LIB_PKG=true
-        ;;
-esac
+    fi
 
-if [ "$UPDATE_APP" = true ]; then
-    (cd frontend/prescription-app && npm update "${LIB_NAME}")
-    print_success "npm update ${LIB_NAME} — OK dans frontend/prescription-app"
+    COMMIT_MSG="${COMMIT_PREFIX}: update ${LIB_NAME} dependency"
+    git commit "${COMMIT_PATHS[@]}" -m "${COMMIT_MSG}"
+    print_success "Commit créé : ${COMMIT_MSG}"
+
+    UPDATE_SCOPE="prescription-app et prescription-lib"
+    if [ "$UPDATE_APP" = true ] && [ "$UPDATE_LIB_PKG" = false ]; then
+        UPDATE_SCOPE="prescription-app uniquement"
+    elif [ "$UPDATE_APP" = false ] && [ "$UPDATE_LIB_PKG" = true ]; then
+        UPDATE_SCOPE="prescription-lib uniquement"
+    fi
+
+    ALL_LIB_NAMES+=("${LIB_NAME}")
+    ALL_COMMIT_MSGS+=("${COMMIT_MSG}")
+    ALL_UPDATE_SCOPES+=("${LIB_NAME}: ${UPDATE_SCOPE}")
+    ALREADY_UPDATED+=("${LIB_NAME}")
+    [ "$UPDATE_APP" = true ] && UPDATE_APP_ANY=true
+    [ "$UPDATE_LIB_PKG" = true ] && UPDATE_LIB_PKG_ANY=true
+
+    echo ""
+    read -rp "➕ Voulez-vous mettre à jour une autre lib (dans un nouveau commit) avant de pousser ? (y/N) : " ADD_ANOTHER_LIB
+    if [[ ! "$ADD_ANOTHER_LIB" =~ ^[yY]$ ]]; then
+        break
+    fi
+done
+
+# Récapitulatif consolidé (utilisé pour le titre/corps de la PR et le résumé final)
+LIB_NAMES_STR=$(IFS=', '; echo "${ALL_LIB_NAMES[*]}")
+if [ "${#ALL_LIB_NAMES[@]}" -eq 1 ]; then
+    COMMIT_MSG="${ALL_COMMIT_MSGS[0]}"
+else
+    COMMIT_MSG="${COMMIT_PREFIX}: update ${LIB_NAMES_STR} dependencies"
 fi
-if [ "$UPDATE_LIB_PKG" = true ]; then
-    (cd frontend/prescription-lib && npm update "${LIB_NAME}")
-    print_success "npm update ${LIB_NAME} — OK dans frontend/prescription-lib"
-fi
-
-# ---- Step 4 — Créer le commit --------------------------------------------------
-
-print_title "Step 4 — Créer le commit"
-
-COMMIT_PATHS=()
-if [ "$UPDATE_APP" = true ]; then
-    git add frontend/prescription-app/package-lock.json
-    COMMIT_PATHS+=("frontend/prescription-app/package-lock.json")
-fi
-if [ "$UPDATE_LIB_PKG" = true ]; then
-    git add frontend/prescription-lib/package-lock.json
-    COMMIT_PATHS+=("frontend/prescription-lib/package-lock.json")
-fi
-
-if git diff --cached --quiet -- "${COMMIT_PATHS[@]}"; then
-    print_warning "Aucun changement détecté dans les package-lock.json après npm update."
-    print_warning "${LIB_NAME} est peut-être déjà à jour."
-    exit 1
-fi
-
-COMMIT_MSG="${COMMIT_PREFIX}: update ${LIB_NAME} dependency"
-git commit "${COMMIT_PATHS[@]}" -m "${COMMIT_MSG}"
-print_success "Commit créé : ${COMMIT_MSG}"
 
 UPDATE_SCOPE="prescription-app et prescription-lib"
-if [ "$UPDATE_APP" = true ] && [ "$UPDATE_LIB_PKG" = false ]; then
+if [ "$UPDATE_APP_ANY" = true ] && [ "$UPDATE_LIB_PKG_ANY" = false ]; then
     UPDATE_SCOPE="prescription-app uniquement"
-elif [ "$UPDATE_APP" = false ] && [ "$UPDATE_LIB_PKG" = true ]; then
+elif [ "$UPDATE_APP_ANY" = false ] && [ "$UPDATE_LIB_PKG_ANY" = true ]; then
     UPDATE_SCOPE="prescription-lib uniquement"
 fi
 
@@ -459,14 +524,20 @@ else
                     JIRA_LINK="${BUG_ID}"
                 fi
 
+                DEPS_DESCRIPTION=""
+                for scope_line in "${ALL_UPDATE_SCOPES[@]}"; do
+                    DEPS_DESCRIPTION="${DEPS_DESCRIPTION}- **${scope_line}**"$'\n'
+                done
+
                 PR_BODY="## Jira Ticket
 
 ${JIRA_LINK}
 
 ## Description
 
-Mise à jour de la dépendance **${LIB_NAME}** dans ${UPDATE_SCOPE}.
+Mise à jour de(s) dépendance(s) :
 
+${DEPS_DESCRIPTION}
 ## Tests
 
 <!-- Résultats des tests -->
@@ -507,8 +578,11 @@ print_summary() {
     echo -e "${BOLD}${GREEN}✅ Workflow complete!${NC}$1"
     echo ""
     echo "🌿 Branche  : ${NEW_BRANCH}  (depuis ${BASE_BRANCH})"
-    echo "📦 Update   : ${LIB_NAME} mis à jour dans ${UPDATE_SCOPE}"
-    echo "💾 Commit   : ${COMMIT_MSG}"
+    echo "📦 Update   : ${#ALL_LIB_NAMES[@]} lib(s) — ${LIB_NAMES_STR}"
+    for i in "${!ALL_LIB_NAMES[@]}"; do
+        echo "   $((i+1))) ${ALL_UPDATE_SCOPES[$i]}"
+        echo "      💾 ${ALL_COMMIT_MSGS[$i]}"
+    done
     if [ -n "$PR_URL" ]; then
         echo "🔗 PR       : ${PR_URL}"
     fi
