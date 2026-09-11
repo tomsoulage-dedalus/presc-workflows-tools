@@ -567,6 +567,24 @@ ${DEPS_DESCRIPTION}
                     PR_URL=""
                 else
                     print_success "Pull Request créée : ${PR_URL}"
+
+                    PR_NUMBER=$(echo "$PR_RESPONSE" | jq -r '.number // ""' 2>/dev/null) || PR_NUMBER=""
+                    if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
+                        print_step "Ajout du label WORKFLOWS..."
+                        LABEL_RESPONSE=$(curl -s \
+                            -X POST \
+                            -H "Authorization: token ${GITHUB_TOKEN}" \
+                            -H "Accept: application/vnd.github+json" \
+                            "${GH_API}/issues/${PR_NUMBER}/labels" \
+                            -d '{"labels":["WORKFLOWS"]}')
+
+                        if echo "$LABEL_RESPONSE" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                            print_success "Label WORKFLOWS ajouté."
+                        else
+                            LABEL_ERROR=$(echo "$LABEL_RESPONSE" | jq -r '.message // "Erreur inconnue"' 2>/dev/null) || LABEL_ERROR="Erreur inconnue"
+                            print_warning "Échec de l'ajout du label WORKFLOWS : ${LABEL_ERROR}"
+                        fi
+                    fi
                 fi
             fi
         fi
