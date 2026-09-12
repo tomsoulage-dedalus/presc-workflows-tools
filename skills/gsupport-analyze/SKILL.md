@@ -58,14 +58,16 @@ dans ce fichier-ci : ni un chemin, ni un nom de repo, ni une correspondance vers
 | `reposDir`, `reportDir` | où sont les repos, où écrire le rapport | 3, 8 |
 | `agents`, `orchestratorModel` | modèles des sous-agents et modèle attendu pour la qualification | 0, 2, 4 |
 | `domains` | routage métier : `aliases` client, `repos`, `paths`, `grepSeeds` | 3.1, 4 |
+| `ownershipBoundaries` | données produites par une autre équipe et seulement affichées chez nous | 2b |
 | `glossary` | jargon client → terme technique | 3.1 |
 | `i18nHint` | où se trouvent réellement les libellés affichés | 4.1 |
 | `repositories` | rôle de chaque repo, URL de clone, `versionRange` | 3 |
 | `excludedRepositories` | repos volontairement hors périmètre, avec le motif | 3 |
 
-Les trois blocs de connaissance — `domains`, `glossary`, `i18nHint` — sont ceux qui font la
-différence entre une recherche ciblée et une recherche à l'aveugle. **Ils vieillissent** : les
-tenir à jour au fil des tickets fait partie du travail d'analyse, pas d'une maintenance à part.
+Les quatre blocs de connaissance — `domains`, `ownershipBoundaries`, `glossary`, `i18nHint` — sont
+ceux qui font la différence entre une recherche ciblée et une recherche à l'aveugle. **Ils
+vieillissent** : les tenir à jour au fil des tickets fait partie du travail d'analyse, pas d'une
+maintenance à part.
 
 Chaque entrée de `repositories` porte `name`, `path` (relatif à `reposDir`) et `description`.
 
@@ -200,6 +202,7 @@ chez l'orchestrateur.
 |---|---|---|
 | Étapes 0, 1, 1b — résolution et validation de la clé, conseil de permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, liens) | **1 sous-agent** (modèle rapide) | `compte-rendu-jira.md` |
+| Étape 2b — cadrage du problème et frontière de responsabilité | orchestrateur | `cadrage.md` |
 | Étape 3 — sélection des repos, diagnostic, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | **1 sous-agent par repo retenu**, en parallèle (modèle fort) | `compte-rendu-code-<repo>.md` |
 | Étapes 5 à 9 — qualification, hypothèses, rapport | orchestrateur | `<ISSUE_KEY>-analyse.md` |
@@ -217,9 +220,11 @@ Un sous-agent qui recopie tout son travail dans sa réponse annule le bénéfice
 
 ### Ce qui ne se délègue jamais
 
-- Toute question à l'utilisateur (`ask_user`) : pré-analyse (étape 1b), `reposDir`
-  introuvable, repo requis manquant, branche approchante à confirmer. Un sous-agent ne peut pas
-  dialoguer.
+- Toute question à l'utilisateur (`ask_user`) : pré-analyse (étape 1b), validation du cadrage
+  (étape 2b), `reposDir` introuvable, repo requis manquant, branche approchante à confirmer. Un
+  sous-agent ne peut pas dialoguer.
+- Le **cadrage** (étape 2b) : il décide de ce qu'on cherche et de qui est responsable. Le déléguer
+  reviendrait à faire trancher le périmètre par l'agent qu'il est censé contraindre.
 - La **qualification** (étape 5) : elle croise Jira, code et contradictions entre commentaires.
   C'est la raison d'être du skill, elle reste chez l'orchestrateur.
 - L'écriture du rapport final.
@@ -470,7 +475,11 @@ plus les consignes communes, et exiger cette structure de compte rendu :
 ```markdown
 # Compte rendu Jira — <ISSUE_KEY>
 ## Champs        <tableau des champs standards et GSUPPORT>
+## Parcours du ticket <équipes / assignés / composants successifs issus du changelog, dans l'ordre ;
+ pour chaque transfert, le commentaire qui l'a motivé s'il existe>
 ## Symptôme      <description reformatée, scénario, résultat actuel/attendu, message d'erreur exact>
+## Donnée en cause <la valeur précise que le client conteste (champ affiché, icône, libellé, calcul)
+ et, si le ticket ou ses commentaires le disent, qui la produit>
 ## Commentaires  <synthèse chronologique : auteur, date, apport>
 ## Pièces jointes <une entrée par PJ : nom, type, ce qu'elle apporte ; "Contenu non exploitable" sinon
  — pour une archive : la liste des fichiers extraits et l'apport de chacun>
@@ -486,7 +495,8 @@ plus les consignes communes, et exiger cette structure de compte rendu :
 ```
 
 La **synthèse renvoyée** (≤ 30 lignes) doit tenir en : version détectée, produit, symptôme en
-trois phrases, message d'erreur exact, pistes de recherche, et ce qui n'a pas pu être lu.
+trois phrases, message d'erreur exact, donnée en cause et son producteur présumé, parcours du
+ticket entre équipes, pistes de recherche, et ce qui n'a pas pu être lu.
 
 ### Ce que l'orchestrateur en fait
 
@@ -502,17 +512,36 @@ recopier quoi que ce soit dans le rapport.
 ## 2.1 — Lire le ticket
 
 Récupérer **tous** les champs (les tickets GSUPPORT portent l'essentiel de l'information dans des
-custom fields, ne pas filtrer avec `?fields=`) :
+custom fields, ne pas filtrer avec `?fields=`), **avec le changelog** — l'historique des transferts
+d'équipe est une donnée d'analyse à part entière, pas une métadonnée :
 
 ```bash
 source ~/.bashrc
 mkdir -p /tmp/gsupport/<ISSUE_KEY>
 curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/json" \
-  "https://${JIRA_DOMAIN}/rest/api/2/issue/<ISSUE_KEY>" \
+  "https://${JIRA_DOMAIN}/rest/api/2/issue/<ISSUE_KEY>?expand=changelog" \
   -o /tmp/gsupport/<ISSUE_KEY>/issue.json
 ```
 
 Si la réponse contient `errorMessages` → afficher `Ticket <ISSUE_KEY> introuvable sur ${JIRA_DOMAIN}` et arrêter.
+
+Extraire ensuite le **parcours du ticket** — équipes, assignés et composants successifs :
+
+```bash
+jq -r '.changelog.histories[]
+  | .created as $d | .author.displayName as $a
+  | .items[]
+  | select(.field | test("team|assignee|component|product"; "i"))
+  | "\($d)\t\($a)\t\(.field)\t\(.fromString // "-") -> \(.toString // "-")"' \
+  /tmp/gsupport/<ISSUE_KEY>/issue.json
+```
+
+Un ticket qui a d'abord vécu chez une **autre équipe** avant d'arriver chez nous n'est pas anodin :
+soit cette équipe a écarté sa responsabilité — et il faut retrouver sur quel argument, dans les
+commentaires —, soit le ticket a été routé vers le seul écran où le client a vu le symptôme, celui
+de prescription, alors que la donnée fautive est produite ailleurs. Dans les deux cas c'est
+l'entrée principale de l'étape 2b : le reporter dans le compte rendu, avec les commentaires qui ont
+motivé chaque transfert.
 
 ### Champs standards
 
@@ -723,6 +752,125 @@ curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" -H "Accept: application/jso
 
 Conclure explicitement : le sujet a-t-il **déjà** été traité, rejeté, ou corrigé dans une version ?
 
+---
+
+## Étape 2b — Cadrage du problème — **orchestrateur, jamais déléguée**
+
+Étape **obligatoire** : rien ne part vers l'étape 3 tant qu'elle n'a pas produit ses trois
+livrables. C'est la seule barrière entre un ticket mal compris et vingt minutes de sous-agents sur
+du code hors sujet.
+
+Le piège propre aux tickets GSUPPORT : **le client signale l'écran où il voit le symptôme, pas le
+composant qui le produit**. Une valeur fausse affichée dans le workflow de prescription arrive donc
+dans le projet de prescription, même quand la valeur est calculée par une autre équipe. Sans
+cadrage, l'analyse cherche une règle métier qui n'a jamais existé de notre côté, ne trouve rien,
+et conclut au mieux `Informations insuffisantes`, au pire à un faux bug.
+
+### 2b.1 — Énoncer le problème de façon falsifiable
+
+Réécrire le symptôme en **une phrase vérifiable**, en termes techniques et non en jargon client :
+
+```
+<donnée ou comportement observable> vaut <valeur constatée> alors que le client attend <valeur attendue>,
+dans <écran / action / contexte>, pour <cas de données précis>.
+```
+
+Trois contrôles, chacun éliminatoire :
+
+1. **L'observable est-il une donnée, un rendu, ou une action refusée ?** Les trois n'ont ni le même
+   propriétaire, ni le même code. « L'icône ne s'affiche pas » et « l'icône s'affiche avec la
+   mauvaise valeur » sont deux tickets différents : le premier est chez nous, le second peut-être pas.
+2. **La valeur attendue est-elle spécifiée quelque part, ou est-ce l'avis du client ?** Sans règle
+   opposable, la piste `Comportement attendu` ou `Évolution` est déjà ouverte.
+3. **Le cas de données est-il identifié ?** Un médicament, un patient, un service précis. Un
+   symptôme sans cas reproductible ne se cherche pas dans le code, il se redemande au client.
+
+Si l'énoncé ne tient pas en une phrase, c'est que le ticket porte **plusieurs** problèmes : les
+séparer et les traiter comme tels, en le disant à l'utilisateur.
+
+### 2b.2 — Poser la frontière de responsabilité
+
+La question à laquelle cette étape existe pour répondre : **produisons-nous la donnée en cause, ou
+ne faisons-nous que l'afficher ?**
+
+`config.json` porte une table `ownershipBoundaries` : chaque entrée décrit une donnée que le
+workflow de prescription **consomme sans la produire**, avec son producteur et les symboles qui la
+trahissent dans le code.
+
+```bash
+jq -r '.ownershipBoundaries[]
+  | "\(.label)\t\(.data)\tproducteur: \(.producer)\t\(.aliases | join(" | "))"' \
+  "$SKILL_DIR/config.json"
+```
+
+Confronter la donnée en cause (section `## Donnée en cause` du compte rendu Jira) aux `aliases` et
+au `data` de chaque entrée. Croiser avec le **parcours du ticket** : un passage antérieur par une
+autre équipe, ou un ticket créé chez elle puis transféré, est le signal le plus fiable dont on
+dispose.
+
+Trois issues possibles, à trancher explicitement :
+
+| Issue | Ce que ça veut dire | Suite |
+|---|---|---|
+| **Dans notre périmètre** | nous produisons la donnée ou portons la règle | étape 3 normale |
+| **Frontière — nous ne faisons qu'afficher** | la donnée vient d'une autre équipe | investigation réduite (2b.3) |
+| **Frontière incertaine** | l'entrée n'existe pas dans `ownershipBoundaries` et le parcours ne tranche pas | étape 3 normale, mais l'hypothèse « donnée fournie » est transmise aux agents de l'étape 4 |
+
+> Ne jamais conclure « hors périmètre » sur la seule foi de la table : elle est incomplète par
+> construction. C'est une **hypothèse à vérifier dans le code** en 2b.3, pas un verdict.
+>
+> Symétriquement, quand une analyse établit une frontière absente de la table, **l'ajouter à
+> `ownershipBoundaries` dans la foulée** et le dire à l'utilisateur. Une frontière découverte
+> aujourd'hui doit coûter zéro sous-agent au prochain ticket : c'est tout l'intérêt du bloc.
+
+### 2b.3 — Investigation réduite quand la frontière tient
+
+Si la frontière est posée, **ne pas lancer les agents de l'étape 4 sur tous les repos**. Un seul
+agent, sur le repo qui porte l'affichage, avec un mandat étroit : **prouver que la valeur reçue est
+affichée telle quelle**. Il cherche les `evidence` de l'entrée `ownershipBoundaries` et doit
+répondre à une seule question, en citant le code :
+
+- la valeur est-elle lue puis rendue sans transformation — auquel cas la responsabilité est
+  bien chez le producteur ;
+- ou existe-t-il, chez nous, un mapping, un filtre, un défaut, une condition d'affichage qui peut
+  la fausser — auquel cas **la frontière ne tient pas** et l'analyse reprend son cours normal à
+  l'étape 3.
+
+Cette vérification n'est pas une formalité : c'est elle qui distingue une réponse support
+défendable d'un renvoi de balle. Sans extrait de code, pas de conclusion `Hors périmètre`.
+
+### 2b.4 — Faire valider le cadrage
+
+Avant de dépenser le moindre sous-agent d'investigation, soumettre le cadrage à l'utilisateur via
+`ask_user`, en **une seule fois** :
+
+```
+Titre  : Cadrage — <ISSUE_KEY>
+Texte  : Voici ce que je comprends du problème avant de fouiller le code.
+         <énoncé falsifiable de 2b.1>
+         Donnée en cause : <donnée> — producteur présumé : <nous | équipe X | inconnu>
+         Parcours du ticket : <équipes successives>
+         Périmètre retenu : <analyse complète | vérification d'affichage seule | analyse complète
+                             avec hypothèse « donnée fournie »>
+
+Champs :
+  - Le cadrage est-il correct ? (select) -> Oui, continue | Non, je corrige | Continue mais élargis
+  - Correction / précision (texte libre, facultatif)
+```
+
+Une réponse qui corrige le cadrage **remplace** l'énoncé : ne pas l'appliquer à moitié, ne pas le
+noyer dans le rapport. `Continue mais élargis` annule la réduction de 2b.3 et rend l'étape 4
+complète.
+
+Comme à l'étape 1b, un formulaire décliné n'arrête rien : le cadrage proposé s'applique tel quel,
+et le rapport indique qu'il n'a pas été validé.
+
+### Ce que l'orchestrateur en fait
+
+Écrire le cadrage dans `/tmp/gsupport/<ISSUE_KEY>/cadrage.md` et le recopier en tête du rapport
+final (étape 9, section `## Cadrage`). Il est repris **tel quel** dans le prompt de chaque agent de
+l'étape 4 : un agent qui ignore la frontière la refranchira.
+
 ## Étape 3 — Sélection des repos et diagnostic — **orchestrateur**
 
 Cette étape reste chez l'orchestrateur : elle est peu volumineuse, et elle peut avoir à
@@ -732,7 +880,11 @@ sous-agent ne sait pas faire. Elle produit le contexte exact que recevront les a
 
 ### 3.1 — Choisir les repos
 
-**Partir de la pré-analyse (étape 1b) si elle a été renseignée** : un domaine imposé remplace le
+**Partir du cadrage (étape 2b)** : il fixe la donnée en cause et le périmètre retenu. Si la
+frontière de responsabilité a été posée, ne router que vers le repo qui porte l'affichage, avec le
+mandat étroit de 2b.3 — le routage par domaine ci-dessous ne s'applique pas.
+
+**Puis la pré-analyse (étape 1b) si elle a été renseignée** : un domaine imposé remplace le
 routage ci-dessous, une couche annoncée et des repos exclus retirent d'office des candidats. Ne
 réexécuter le routage complet que sur ce qui reste ouvert.
 
@@ -990,6 +1142,7 @@ cette étape interdit. Le prompt doit contenir :
 | Élément | Pourquoi |
 |---|---|
 | Chemin absolu du repo et **branche résolue** (`origin/<branche>`) | il ne doit ni redeviner la branche ni toucher au working tree |
+| Le **cadrage de l'étape 2b** recopié tel quel : énoncé falsifiable, donnée en cause, frontière retenue | c'est ce qui l'empêche de chercher chez nous une règle qui appartient à une autre équipe ; un agent qui ne connaît pas la frontière la refranchit |
 | Version détectée du client | pour l'analyse de régression |
 | Symptôme en trois phrases + **message d'erreur exact** | son point d'entrée |
 | Les « Pistes de recherche » du `compte-rendu-jira.md` | les motifs `git grep` à essayer en premier |
@@ -1031,6 +1184,9 @@ ceux de l'utilisateur, avec du travail en cours dessus.
 ## Fichiers retenus         <une section par fichier : chemin:lignes, rôle, extrait 10–30 lignes>
 ## Condition exacte qui produit le symptôme
 ## Version et régression    <la règle existe-t-elle déjà sur cette branche ? git log -S / diff>
+## Origine de la donnée     <pour la donnée en cause : est-elle calculée ici, ou reçue d'un service
+ externe et rendue telle quelle ? citer le point d'entrée (DTO, mapper, appel REST) et toute
+ transformation trouvée. Obligatoire dès que le cadrage évoque une frontière.>
 ## Verdict du repo          <ce que ce repo établit, et ce qu'il ne permet pas de conclure>
 ## Pistes non concluantes   <motifs cherchés sans résultat — évite qu'on les recherche deux fois>
 ```
@@ -1164,6 +1320,7 @@ les éléments concrets qui la justifient (extrait de code, commentaire, capture
 | Catégorie | Signification | Suite à donner |
 |---|---|---|
 | Bug dans notre code | Le comportement contredit la règle métier attendue | Créer un `ORBISBUG` |
+| Hors périmètre — autre équipe | La donnée ou la règle en cause est produite par une autre équipe ; nous ne faisons que l'afficher, ce que le code confirme | Réassigner le ticket à l'équipe productrice, avec l'extrait de code qui établit la frontière |
 | Configuration / données | Paramétrage, droits, données client ou environnement en cause | Retour au support / à l'équipe déploiement |
 | Comportement attendu | Le produit fonctionne comme spécifié, le client attendait autre chose | Réponse fonctionnelle argumentée au client |
 | Évolution / changement de comportement | La demande sort du comportement spécifié | Créer un `HORME` (à arbitrer produit) |
@@ -1176,6 +1333,12 @@ Toujours indiquer :
 
 Ne jamais conclure « bug » par défaut faute d'information : c'est le cas
 `Informations insuffisantes`.
+
+`Hors périmètre — autre équipe` se tient à une exigence de preuve plus haute que les autres, parce
+qu'elle renvoie le ticket à quelqu'un d'autre : elle exige la section `## Origine de la donnée` d'un
+compte rendu de code, avec l'extrait montrant que la valeur est rendue sans transformation. Une
+frontière plausible mais non vérifiée dans le code se qualifie `Informations insuffisantes`, en
+nommant l'équipe pressentie et la vérification qui reste à faire.
 
 ## Étape 6 — Hypothèses techniques
 
@@ -1204,6 +1367,9 @@ Sans cette table, une catégorie `Informations insuffisantes` n'est pas exploita
 - Questions précises à poser au client (numérotées, chacune rattachée à une ligne du tableau ci-dessus).
 - Vérifications à faire en interne (base, logs, environnement, version livrée).
 - Brouillon de réponse support (ton factuel, sans jargon interne, en anglais si le ticket est en anglais).
+- Si la catégorie est `Hors périmètre — autre équipe` : équipe destinataire, extrait de code qui
+  établit la frontière, et commentaire prêt à poster sur le ticket. Nommer la donnée et son
+  producteur — un renvoi sans preuve revient sur nous au transfert suivant.
 - Si un `ORBISBUG` ou un `HORME` est à créer : titre proposé et résumé prêt à copier.
 
 ## Étape 8 — Sauvegarder le rapport
@@ -1275,6 +1441,7 @@ Même contenu dans le fichier et dans le chat.
 | Produit | <PRODUCT> |
 | Version détectée | <DETECTED_IN_VERSION> |
 | Équipe | <TEAM> |
+| Parcours du ticket | <équipes successives issues du changelog, ex. « DDM → Prescription workflow », ou "aucun transfert"> |
 
 ## Symptôme
 
@@ -1294,6 +1461,17 @@ Même contenu dans le fichier et dans le chat.
 ```
 <message d'erreur exact, tel que remonté>
 ```
+
+## Cadrage
+
+**Problème** : <énoncé falsifiable de l'étape 2b — observable, valeur constatée, valeur attendue,
+contexte, cas de données>
+**Donnée en cause** : <champ / icône / libellé / calcul précis>
+**Producteur de la donnée** : <nous | équipe X | inconnu> — <sur quoi repose la conclusion : entrée
+`ownershipBoundaries`, parcours du ticket, extrait de code>
+**Périmètre retenu** : <analyse complète | vérification d'affichage seule | analyse complète avec
+hypothèse « donnée fournie »>
+**Cadrage validé par l'utilisateur** : <oui | non, appliqué tel quel | corrigé : <correction>>
 
 ## Commentaires
 <synthèse chronologique — auteur, date, apport du commentaire>
@@ -1362,7 +1540,7 @@ antérieure, confirmation ou infirmation de la régression>
 **Catégories écartées**
 - <catégorie> : <raison>
 
-**Suite à donner** : <ORBISBUG | HORME | retour support | réponse client | demande d'information>
+**Suite à donner** : <ORBISBUG | HORME | réassignation à l'équipe <X> | retour support | réponse client | demande d'information>
 
 ## Hypothèses techniques
 <uniquement si bug ou évolution>
@@ -1397,6 +1575,12 @@ antérieure, confirmation ou infirmation de la régression>
 - **Type** : <ORBISBUG | HORME | aucun>
 - **Titre** : <...>
 - **Résumé** : <...>
+
+### Réassignation
+<uniquement si la catégorie est `Hors périmètre — autre équipe`>
+- **Équipe destinataire** : <...>
+- **Preuve de la frontière** : <fichier:lignes montrant que la valeur est affichée telle quelle>
+- **Commentaire à poster sur le ticket** : <texte factuel nommant la donnée et son producteur>
 
 ## Traçabilité
 Modèles : orchestrateur `<modèle de session>` · collecte `<agents.jiraCollect.model>` ·
@@ -1447,10 +1631,11 @@ qu'on le lui demande.
 | Un bloc passe de l'orchestrateur à un sous-agent (ou l'inverse) | § 2, § 3, et la liste « ne se délègue jamais » |
 | Nouveau fichier écrit dans `/tmp/gsupport/<KEY>/` | § 4 passage par fichiers |
 | Nouveau type de pièce jointe ou nouvelle règle d'extraction | § 5 aiguillage des pièces jointes |
-| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 6 (texte et exemples de vocabulaire, pas un schéma) |
-| Nouvelle catégorie de qualification ou nouveau garde-fou | § 7 |
-| Nouveau cas d'erreur ou de reprise | § 8 tableau de reprise sur incident |
-| Nouvelle clé structurante dans `config.json` | § 9 « ce qu'il faut entretenir », et § 2 si elle alimente une étape |
+| Changement dans le cadrage ou dans les frontières entre équipes | § 6 |
+| Changement dans le routage (domaines, glossaire, `versionRange`, branche) | § 7 (texte et exemples de vocabulaire, pas un schéma) |
+| Nouvelle catégorie de qualification ou nouveau garde-fou | § 8 |
+| Nouveau cas d'erreur ou de reprise | § 9 tableau de reprise sur incident |
+| Nouvelle clé structurante dans `config.json` | § 10 « ce qu'il faut entretenir », et § 2 si elle alimente une étape |
 
 Ajouter une simple précision de rédaction dans une étape existante ne demande pas de toucher aux
 schémas. Le déclencheur, c'est le **flux** : qui exécute quoi, dans quel ordre, avec quelles
