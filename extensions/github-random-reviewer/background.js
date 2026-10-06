@@ -3,6 +3,7 @@ const API_ROOT = 'https://api.github.com';
 const DEFAULT_SETTINGS = {
     token: '',
     users: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
+    vacationUsers: [],
     excludeSelf: true,
     replaceExisting: false,
     requestReview: true
@@ -13,6 +14,7 @@ async function getSettings() {
     return {
         token: (stored.token || '').trim(),
         users: normalizeUsers(stored.users),
+        vacationUsers: normalizeUsers(stored.vacationUsers),
         excludeSelf: stored.excludeSelf !== false,
         replaceExisting: stored.replaceExisting === true,
         requestReview: stored.requestReview !== false
@@ -53,6 +55,18 @@ function pickRandom(candidates) {
     return candidates[index];
 }
 
+function buildCandidates(settings, { author = null, currentAssignees = [] } = {}) {
+    const excluded = new Set(currentAssignees.map((login) => login.toLowerCase()));
+
+    settings.vacationUsers.forEach((user) => excluded.add(user.toLowerCase()));
+
+    if (settings.excludeSelf && author) {
+        excluded.add(author.toLowerCase());
+    }
+
+    return settings.users.filter((user) => !excluded.has(user.toLowerCase()));
+}
+
 async function assignRandomUser({ owner, repo, number }) {
     const settings = await getSettings();
 
@@ -69,16 +83,10 @@ async function assignRandomUser({ owner, repo, number }) {
     const currentAssignees = (pullRequest.assignees || []).map((assignee) => assignee.login);
     const currentReviewers = ((pullRequest.requested_reviewers || [])).map((reviewer) => reviewer.login);
 
-    const excluded = new Set(currentAssignees.map((login) => login.toLowerCase()));
-
-    if (settings.excludeSelf && author) {
-        excluded.add(author.toLowerCase());
-    }
-
-    const candidates = settings.users.filter((user) => !excluded.has(user.toLowerCase()));
+    const candidates = buildCandidates(settings, { author, currentAssignees });
 
     if (candidates.length === 0) {
-        throw new Error('Aucun candidat disponible (auteur et assignes actuels exclus).');
+        throw new Error('Aucun candidat disponible (auteur, conges et assignes actuels exclus).');
     }
 
     const chosen = pickRandom(candidates);
@@ -148,7 +156,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     if (message && message.type === 'GET_CANDIDATES') {
         getSettings()
-            .then((settings) => sendResponse({ ok: true, users: settings.users }))
+            .then((settings) => sendResponse({ ok: true, users: buildCandidates(settings) }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }

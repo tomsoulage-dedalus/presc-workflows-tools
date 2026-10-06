@@ -21,9 +21,12 @@ Clic droit sur l'icone de l'extension > **Options** (ou lien *Options* dans la p
 | --- | --- |
 | Token GitHub (PAT) | Requis pour appeler l'API. Stocke dans `chrome.storage.local`. |
 | Utilisateurs candidats | Logins separes par virgules / espaces / retours a la ligne. |
+| En conges / indisponibles | Logins exclus du tirage sans etre retires de la liste des candidats. |
 | Exclure l'auteur | Retire l'auteur de la PR du tirage. |
 | Demander aussi une revue | Ajoute l'utilisateur aux reviewers demandes. |
 | Remplacer les assignes existants | Supprime les assignes actuels avant d'ajouter le nouveau. |
+
+Le tirage se fait parmi `candidats - conges - auteur - assignes actuels`.
 
 ### Token requis
 

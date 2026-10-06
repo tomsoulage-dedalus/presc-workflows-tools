@@ -187,23 +187,25 @@ function findSidebarAnchor() {
 
 function mountButton() {
     if (!parsePullRequestUrl()) {
-        const stale = document.getElementById(BUTTON_ID);
-
-        if (stale) {
-            stale.remove();
-        }
-
+        removeButton();
         return;
     }
 
+    const anchor = findSidebarAnchor();
     const existing = document.getElementById(BUTTON_ID);
 
     if (existing && existing.isConnected) {
-        return;
+        const isFloating = existing.classList.contains('gh-ra-button--floating');
+        const isWellPlaced = anchor ? anchor.contains(existing) : isFloating;
+
+        if (isWellPlaced) {
+            return;
+        }
+
+        removeButton();
     }
 
     const button = createButton();
-    const anchor = findSidebarAnchor();
 
     if (anchor) {
         const wrapper = document.createElement('div');
@@ -217,13 +219,56 @@ function mountButton() {
     document.body.appendChild(button);
 }
 
-function observePageChanges() {
-    const observer = new MutationObserver(() => mountButton());
-    observer.observe(document.body, { childList: true, subtree: true });
+function removeButton() {
+    const stale = document.getElementById(BUTTON_ID);
 
-    document.addEventListener('turbo:load', mountButton);
-    document.addEventListener('pjax:end', mountButton);
-    window.addEventListener('popstate', mountButton);
+    if (stale) {
+        const slot = stale.closest('.gh-ra-sidebar-slot');
+        (slot || stale).remove();
+    }
+}
+
+function observePageChanges() {
+    let scheduled = false;
+
+    const scheduleMount = () => {
+        if (scheduled) {
+            return;
+        }
+
+        scheduled = true;
+        window.requestAnimationFrame(() => {
+            scheduled = false;
+            mountButton();
+        });
+    };
+
+    const onUrlChange = () => {
+        removeButton();
+        scheduleMount();
+    };
+
+    // documentElement survit au remplacement du body par Turbo, contrairement a document.body.
+    new MutationObserver(scheduleMount).observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+
+    ['turbo:load', 'turbo:render', 'turbo:frame-render', 'pjax:end', 'soft-nav:end'].forEach((eventName) =>
+        document.addEventListener(eventName, onUrlChange)
+    );
+
+    window.addEventListener('popstate', onUrlChange);
+
+    let lastUrl = window.location.href;
+    window.setInterval(() => {
+        if (window.location.href === lastUrl) {
+            return;
+        }
+
+        lastUrl = window.location.href;
+        onUrlChange();
+    }, 500);
 }
 
 mountButton();
