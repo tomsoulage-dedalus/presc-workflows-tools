@@ -16,7 +16,7 @@ Basé sur la doc EDP :
 1. Ouvre `chrome://extensions`
 2. Active le **mode développeur** (toggle en haut à droite)
 3. Clique sur **Charger l'extension non empaquetée**
-4. Sélectionne le dossier `edp-postmessage-extension/`
+4. Sélectionne le dossier ``
 5. Épingle l'extension dans la barre d'outils Chrome
 
 ## Utilisation
