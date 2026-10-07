@@ -86,6 +86,12 @@
             cursor: pointer;
         }
 
+        button.secondary {
+            margin-left: 8px;
+            color: #1f2328;
+            background-color: #f6f8fa;
+        }
+
         #status {
             margin-left: 12px;
             font-size: 13px;
@@ -174,8 +180,10 @@
     </div>
 
     <button id="save" type="button">Enregistrer</button>
+    <button id="reset" class="secondary" type="button">Valeurs par defaut</button>
     <span id="status"></span>
 
+    <script src="defaults.js"></script>
     <script src="options.js"></script>
 </body>
 </html>
