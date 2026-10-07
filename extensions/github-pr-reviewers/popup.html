@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="utf-8" />
-    <title>GitHub Team Reviewers</title>
+    <title>GitHub PR Reviewers</title>
     <style>
         body {
             margin: 0;
@@ -16,6 +16,32 @@
         h1 {
             font-size: 14px;
             margin: 0 0 10px;
+        }
+
+        #random {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: #1f883d;
+            border: 1px solid rgba(31, 35, 40, 0.15);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #random[hidden] {
+            display: none;
+        }
+
+        #random:disabled {
+            opacity: 0.6;
+            cursor: default;
         }
 
         #list {
@@ -92,7 +118,8 @@
     </style>
 </head>
 <body>
-    <h1>GitHub Team Reviewers</h1>
+    <h1>GitHub PR Reviewers</h1>
+    <button id="random" type="button" hidden>🎲 Au hasard</button>
     <div id="list"></div>
     <p id="message"></p>
     <footer><a id="options" href="#">Options</a></footer>

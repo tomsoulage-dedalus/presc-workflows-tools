@@ -1,4 +1,4 @@
-.gh-tr-panel {
+.gh-pr-panel {
     margin-top: 12px;
     padding: 10px;
     font-size: 12px;
@@ -8,7 +8,7 @@
     border-radius: 6px;
 }
 
-.gh-tr-panel--floating {
+.gh-pr-panel--floating {
     position: fixed;
     right: 16px;
     bottom: 16px;
@@ -18,24 +18,24 @@
     box-shadow: 0 3px 12px rgba(31, 35, 40, 0.25);
 }
 
-.gh-tr-panel--busy {
+.gh-pr-panel--busy {
     pointer-events: none;
     opacity: 0.75;
 }
 
-.gh-tr-panel__header {
+.gh-pr-panel__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 8px;
 }
 
-.gh-tr-panel__title {
+.gh-pr-panel__title {
     font-weight: 600;
     color: var(--fgColor-muted, #59636e);
 }
 
-.gh-tr-panel__refresh {
+.gh-pr-panel__refresh {
     padding: 0 6px;
     font-size: 14px;
     line-height: 18px;
@@ -46,32 +46,96 @@
     cursor: pointer;
 }
 
-.gh-tr-panel__refresh:hover {
+.gh-pr-panel__refresh:hover {
     border-color: var(--borderColor-default, rgba(31, 35, 40, 0.15));
 }
 
-.gh-tr-panel__list {
+.gh-pr-panel__list {
     display: flex;
     flex-direction: column;
     gap: 4px;
 }
 
-.gh-tr-panel__message {
+.gh-pr-panel__list:not(:empty) {
+    margin-top: 8px;
+}
+
+.gh-pr-panel__message {
     margin: 8px 0 0;
     font-size: 11px;
     line-height: 15px;
     color: var(--fgColor-muted, #59636e);
 }
 
-.gh-tr-panel__message--error {
+.gh-pr-panel__message--error {
     color: var(--fgColor-danger, #cf222e);
 }
 
-.gh-tr-panel__message[hidden] {
+.gh-pr-panel__message[hidden] {
     display: none;
 }
 
-.gh-tr-member {
+.gh-pr-random {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--fgColor-default, #1f2328);
+    background-color: var(--bgColor-default, #ffffff);
+    border: 1px solid var(--borderColor-default, rgba(31, 35, 40, 0.15));
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.gh-pr-random[hidden] {
+    display: none;
+}
+
+.gh-pr-random:hover:not(:disabled) {
+    background-color: var(--bgColor-neutral-muted, #eff2f5);
+}
+
+.gh-pr-random:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.gh-pr-random__label {
+    font-variant-numeric: tabular-nums;
+}
+
+.gh-pr-random__dice {
+    display: inline-block;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.gh-pr-random--rolling {
+    cursor: progress;
+}
+
+.gh-pr-random--rolling .gh-pr-random__dice {
+    animation: gh-pr-dice-spin 0.6s linear infinite;
+}
+
+.gh-pr-random--rolling .gh-pr-random__label {
+    opacity: 0.75;
+}
+
+.gh-pr-random--winner {
+    color: var(--fgColor-success, #1a7f37);
+    background-color: var(--bgColor-success-muted, #dafbe1);
+    border-color: var(--borderColor-success-emphasis, rgba(26, 127, 55, 0.4));
+    animation: gh-pr-pop 0.35s ease;
+}
+
+.gh-pr-member {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -89,32 +153,32 @@
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.gh-tr-member:hover:not(:disabled) {
+.gh-pr-member:hover:not(:disabled) {
     background-color: var(--bgColor-neutral-muted, #eff2f5);
     border-color: var(--borderColor-accent-emphasis, rgba(9, 105, 218, 0.4));
 }
 
-.gh-tr-member:disabled {
+.gh-pr-member:disabled {
     cursor: default;
     opacity: 0.6;
 }
 
-.gh-tr-member--unavailable {
+.gh-pr-member--unavailable {
     opacity: 0.6;
 }
 
-.gh-tr-member--active,
-.gh-tr-member--reviewed {
+.gh-pr-member--active,
+.gh-pr-member--reviewed {
     background-color: var(--bgColor-success-muted, #dafbe1);
     border-color: var(--borderColor-success-emphasis, rgba(26, 127, 55, 0.4));
 }
 
-.gh-tr-member--loading {
+.gh-pr-member--loading {
     cursor: progress;
-    animation: gh-tr-pulse 1s ease-in-out infinite;
+    animation: gh-pr-pulse 1s ease-in-out infinite;
 }
 
-.gh-tr-member__avatar {
+.gh-pr-member__avatar {
     width: 20px;
     height: 20px;
     border-radius: 50%;
@@ -123,14 +187,14 @@
     background-color: rgba(31, 35, 40, 0.08);
 }
 
-.gh-tr-member__name {
+.gh-pr-member__name {
     flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.gh-tr-member__badge {
+.gh-pr-member__badge {
     flex-shrink: 0;
     padding: 0 6px;
     font-size: 10px;
@@ -141,7 +205,7 @@
     border-radius: 999px;
 }
 
-.gh-tr-toast {
+.gh-pr-toast {
     position: fixed;
     right: 16px;
     bottom: 72px;
@@ -160,20 +224,20 @@
     pointer-events: none;
 }
 
-.gh-tr-toast--visible {
+.gh-pr-toast--visible {
     opacity: 1;
     transform: translateY(0);
 }
 
-.gh-tr-toast--success {
+.gh-pr-toast--success {
     background-color: #1a7f37;
 }
 
-.gh-tr-toast--error {
+.gh-pr-toast--error {
     background-color: #cf222e;
 }
 
-.gh-tr-toast__avatar {
+.gh-pr-toast__avatar {
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -181,35 +245,60 @@
     border: 2px solid rgba(255, 255, 255, 0.6);
     object-fit: cover;
     flex-shrink: 0;
+    animation: gh-pr-pop 0.35s ease;
 }
 
-.gh-tr-toast__avatar[hidden] {
+.gh-pr-toast__avatar[hidden] {
     display: none;
 }
 
-.gh-tr-toast__body {
+.gh-pr-toast__body {
     display: flex;
     flex-direction: column;
     min-width: 0;
 }
 
-.gh-tr-toast__title {
+.gh-pr-toast__title {
     font-size: 14px;
     font-weight: 600;
     line-height: 18px;
 }
 
-.gh-tr-toast__detail {
+.gh-pr-toast__detail {
     font-size: 12px;
     line-height: 16px;
     opacity: 0.9;
 }
 
-.gh-tr-toast__detail[hidden] {
+.gh-pr-toast__detail[hidden] {
     display: none;
 }
 
-@keyframes gh-tr-pulse {
+@keyframes gh-pr-dice-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes gh-pr-pop {
+    0% {
+        transform: scale(0.75);
+    }
+
+    60% {
+        transform: scale(1.12);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes gh-pr-pulse {
     0%,
     100% {
         opacity: 1;
@@ -221,7 +310,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .gh-tr-member--loading {
+    .gh-pr-member--loading,
+    .gh-pr-random--winner,
+    .gh-pr-random--rolling .gh-pr-random__dice,
+    .gh-pr-toast__avatar {
         animation: none;
     }
 }

@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "GitHub Random Assignee",
-  "version": "1.0.0",
-  "description": "Assigne une Pull Request GitHub a un relecteur tire au hasard dans une liste configurable.",
-  "permissions": ["storage", "activeTab"],
+  "name": "GitHub PR Reviewers",
+  "version": "2.0.0",
+  "description": "Ajoute un reviewer/assignee sur une PR GitHub en un clic depuis la liste de l'equipe, ou par tirage au hasard.",
+  "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["https://api.github.com/*"],
   "options_page": "options.html",
   "action": {
-    "default_title": "GitHub Random Assignee",
+    "default_title": "GitHub PR Reviewers",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
