@@ -44,7 +44,8 @@ Le token n'est jamais envoye ailleurs que vers `https://api.github.com`.
 
 ## Utilisation
 
-Sur une page `https://github.com/<owner>/<repo>/pull/<n>` :
+Sur une page `https://github.com/<owner>/<repo>/pull/<n>` (onglet **Conversation** uniquement ; le panneau
+n'apparait pas sur `/files`, `/commits`, `/checks`...) :
 
 - un panneau **Equipe** est injecte dans la barre laterale (section *Reviewers*), avec repli en panneau
   flottant en bas a droite si la sidebar n'est pas trouvee ;
