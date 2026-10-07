@@ -4,9 +4,12 @@ const DEFAULT_SETTINGS = {
     token: '',
     team: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
     unavailable: ['apzpr'],
+    showTeam: true,
+    showRandom: true,
     addReviewer: true,
     addAssignee: true,
-    hideSelf: true
+    hideSelf: true,
+    replaceExisting: false
 };
 
 function parseTeam(value) {
@@ -47,9 +50,12 @@ async function getSettings() {
         token: (stored.token || '').trim(),
         team: parseTeam(stored.team),
         unavailable: normalizeLogins(stored.unavailable),
+        showTeam: stored.showTeam !== false,
+        showRandom: stored.showRandom !== false,
         addReviewer: stored.addReviewer !== false,
         addAssignee: stored.addAssignee !== false,
-        hideSelf: stored.hideSelf !== false
+        hideSelf: stored.hideSelf !== false,
+        replaceExisting: stored.replaceExisting === true
     };
 }
 
@@ -82,10 +88,7 @@ function requireToken(settings) {
     }
 }
 
-async function fetchPullRequestState({ owner, repo, number }) {
-    const settings = await getSettings();
-    requireToken(settings);
-
+async function fetchPullRequestState(settings, { owner, repo, number }) {
     const pullRequest = await githubRequest(settings.token, `/repos/${owner}/${repo}/pulls/${number}`);
 
     let reviewed = [];
@@ -108,10 +111,7 @@ async function fetchPullRequestState({ owner, repo, number }) {
     };
 }
 
-async function buildBoard(pullRequest) {
-    const settings = await getSettings();
-    const state = await fetchPullRequestState(pullRequest);
-
+function buildMembers(settings, state) {
     const lower = (list) => new Set(list.map((login) => login.toLowerCase()));
     const reviewers = lower(state.reviewers);
     const assignees = lower(state.assignees);
@@ -119,7 +119,7 @@ async function buildBoard(pullRequest) {
     const unavailable = lower(settings.unavailable);
     const author = state.author ? state.author.toLowerCase() : null;
 
-    const members = settings.team
+    return settings.team
         .filter((member) => !(settings.hideSelf && author && member.login.toLowerCase() === author))
         .map((member) => {
             const key = member.login.toLowerCase();
@@ -143,34 +143,45 @@ async function buildBoard(pullRequest) {
 
             return { ...member, status, isReviewer, isAssignee, hasReviewed, isAuthor, isUnavailable };
         });
+}
 
+// Candidats du tirage : membres disponibles, pas encore sur la PR, et pas l'auteur.
+function randomCandidates(members) {
+    return members.filter((member) => member.status === 'idle');
+}
+
+function toBoard(settings, state, members) {
     return {
         members,
         state,
-        settings: { addReviewer: settings.addReviewer, addAssignee: settings.addAssignee }
+        settings: {
+            addReviewer: settings.addReviewer,
+            addAssignee: settings.addAssignee,
+            showTeam: settings.showTeam,
+            showRandom: settings.showRandom
+        },
+        candidates: randomCandidates(members).map((member) => member.login)
     };
 }
 
-async function addMember({ owner, repo, number, login }) {
+async function buildBoard(pullRequest) {
     const settings = await getSettings();
     requireToken(settings);
 
-    if (!settings.addReviewer && !settings.addAssignee) {
-        throw new Error('Reviewer et assignee sont desactives dans les options.');
-    }
+    const state = await fetchPullRequestState(settings, pullRequest);
 
-    const state = await fetchPullRequestState({ owner, repo, number });
+    return toBoard(settings, state, buildMembers(settings, state));
+}
+
+async function applyMember(settings, { owner, repo, number }, login, state) {
     const key = login.toLowerCase();
-
-    if (state.author && state.author.toLowerCase() === key) {
-        throw new Error("L'auteur ne peut pas etre reviewer de sa propre PR.");
-    }
-
     const done = [];
     const skipped = [];
 
     if (settings.addReviewer) {
-        if (state.reviewers.some((reviewer) => reviewer.toLowerCase() === key)) {
+        if (state.author && state.author.toLowerCase() === key) {
+            skipped.push('auteur de la PR');
+        } else if (state.reviewers.some((reviewer) => reviewer.toLowerCase() === key)) {
             skipped.push('revue deja demandee');
         } else if (state.reviewed.some((reviewer) => reviewer.toLowerCase() === key)) {
             skipped.push('a deja relu la PR');
@@ -202,9 +213,69 @@ async function addMember({ owner, repo, number, login }) {
         }
     }
 
-    const board = await buildBoard({ owner, repo, number });
+    return { done, skipped };
+}
 
-    return { login, done, skipped, ...board };
+function requireAction(settings) {
+    if (!settings.addReviewer && !settings.addAssignee) {
+        throw new Error('Reviewer et assignee sont desactives dans les options.');
+    }
+}
+
+async function refreshBoard(settings, pullRequest) {
+    const state = await fetchPullRequestState(settings, pullRequest);
+    return toBoard(settings, state, buildMembers(settings, state));
+}
+
+async function addMember({ owner, repo, number, login }) {
+    const settings = await getSettings();
+    requireToken(settings);
+    requireAction(settings);
+
+    const pullRequest = { owner, repo, number };
+    const state = await fetchPullRequestState(settings, pullRequest);
+
+    if (settings.addReviewer && !settings.addAssignee && state.author && state.author.toLowerCase() === login.toLowerCase()) {
+        throw new Error("L'auteur ne peut pas etre reviewer de sa propre PR.");
+    }
+
+    const result = await applyMember(settings, pullRequest, login, state);
+    const board = await refreshBoard(settings, pullRequest);
+
+    return { login, ...result, ...board };
+}
+
+async function assignRandom({ owner, repo, number }) {
+    const settings = await getSettings();
+    requireToken(settings);
+    requireAction(settings);
+
+    if (settings.team.length === 0) {
+        throw new Error("Aucun membre configure. Ouvre les options de l'extension.");
+    }
+
+    const pullRequest = { owner, repo, number };
+    const state = await fetchPullRequestState(settings, pullRequest);
+    const candidates = randomCandidates(buildMembers(settings, state));
+
+    if (candidates.length === 0) {
+        throw new Error('Aucun candidat disponible (auteur, indisponibles et personnes deja sur la PR exclus).');
+    }
+
+    const chosen = candidates[Math.floor(Math.random() * candidates.length)].login;
+
+    if (settings.replaceExisting && settings.addAssignee && state.assignees.length > 0) {
+        await githubRequest(settings.token, `/repos/${owner}/${repo}/issues/${number}/assignees`, {
+            method: 'DELETE',
+            body: JSON.stringify({ assignees: state.assignees })
+        });
+        state.assignees = [];
+    }
+
+    const result = await applyMember(settings, pullRequest, chosen, state);
+    const board = await refreshBoard(settings, pullRequest);
+
+    return { login: chosen, ...result, ...board };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -226,9 +297,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return true;
     }
 
-    if (message.type === 'GET_TEAM') {
+    if (message.type === 'ASSIGN_RANDOM') {
+        assignRandom(message.payload)
+            .then((result) => sendResponse({ ok: true, ...result }))
+            .catch((error) => sendResponse({ ok: false, error: error.message }));
+        return true;
+    }
+
+    if (message.type === 'GET_SETTINGS') {
         getSettings()
-            .then((settings) => sendResponse({ ok: true, team: settings.team, hasToken: Boolean(settings.token) }))
+            .then((settings) => sendResponse({ ok: true, settings: { ...settings, token: undefined, hasToken: Boolean(settings.token) } }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));
         return true;
     }

@@ -1,5 +1,6 @@
 const listNode = document.getElementById('list');
 const messageNode = document.getElementById('message');
+const randomButton = document.getElementById('random');
 
 const DISABLED_STATUSES = new Set(['active', 'reviewed', 'author']);
 
@@ -56,15 +57,21 @@ async function getActiveTab() {
     return tab;
 }
 
-function renderMembers(members) {
+function renderBoard(board) {
     listNode.textContent = '';
+    randomButton.hidden = !board.settings.showRandom;
+    randomButton.disabled = board.candidates.length === 0;
 
-    if (!members || members.length === 0) {
-        setMessage("Aucun membre configure. Ouvre les options.", true);
+    if (!board.members || board.members.length === 0) {
+        setMessage('Aucun membre configure. Ouvre les options.', true);
         return;
     }
 
-    members.forEach((member) => {
+    if (!board.settings.showTeam) {
+        return;
+    }
+
+    board.members.forEach((member) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'member';
@@ -93,6 +100,23 @@ function renderMembers(members) {
     });
 }
 
+function boardFrom(response) {
+    return {
+        members: response.members,
+        state: response.state,
+        settings: response.settings,
+        candidates: response.candidates || []
+    };
+}
+
+function resultDetail(response) {
+    if (response.done.length > 0) {
+        return response.done.join(' + ');
+    }
+
+    return response.skipped.join(' + ') || 'rien a faire';
+}
+
 async function load() {
     const tab = await getActiveTab();
     pullRequest = tab ? parsePullRequestUrl(tab.url || '') : null;
@@ -111,19 +135,23 @@ async function load() {
         return;
     }
 
-    renderMembers(response.members);
-    setMessage('Clique sur un membre pour l\'ajouter.', false);
+    const board = boardFrom(response);
+    renderBoard(board);
+
+    if (board.members.length > 0) {
+        setMessage(board.settings.showTeam ? "Clique sur un membre pour l'ajouter." : 'Tire un membre au hasard.', false);
+    }
 }
 
-async function add(login) {
+async function run(message, label) {
     if (!pullRequest || busy) {
         return;
     }
 
     busy = true;
-    setMessage(`Ajout de @${login}...`, false);
+    setMessage(label, false);
 
-    const response = await sendMessage({ type: 'ADD_MEMBER', payload: { ...pullRequest, login } });
+    const response = await sendMessage(message);
     busy = false;
 
     if (!response.ok) {
@@ -131,10 +159,17 @@ async function add(login) {
         return;
     }
 
-    renderMembers(response.members);
-    const detail = response.done.length > 0 ? response.done.join(' + ') : response.skipped.join(' + ') || 'rien a faire';
-    setMessage(`@${login} : ${detail}.`, false);
+    renderBoard(boardFrom(response));
+    setMessage(`@${response.login} : ${resultDetail(response)}.`, false);
 }
+
+function add(login) {
+    return run({ type: 'ADD_MEMBER', payload: { ...pullRequest, login } }, `Ajout de @${login}...`);
+}
+
+randomButton.addEventListener('click', () => {
+    run({ type: 'ASSIGN_RANDOM', payload: pullRequest }, 'Tirage en cours...');
+});
 
 document.getElementById('options').addEventListener('click', (event) => {
     event.preventDefault();

@@ -2,17 +2,23 @@ const DEFAULT_SETTINGS = {
     token: '',
     team: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
     unavailable: [],
+    showTeam: true,
+    showRandom: true,
     addReviewer: true,
     addAssignee: true,
-    hideSelf: true
+    hideSelf: true,
+    replaceExisting: false
 };
 
 const tokenInput = document.getElementById('token');
 const teamInput = document.getElementById('team');
 const unavailableInput = document.getElementById('unavailable');
+const showTeamInput = document.getElementById('showTeam');
+const showRandomInput = document.getElementById('showRandom');
 const addReviewerInput = document.getElementById('addReviewer');
 const addAssigneeInput = document.getElementById('addAssignee');
 const hideSelfInput = document.getElementById('hideSelf');
+const replaceExistingInput = document.getElementById('replaceExisting');
 const statusLabel = document.getElementById('status');
 
 function parseEntries(value) {
@@ -62,9 +68,12 @@ async function restore() {
     tokenInput.value = settings.token || '';
     teamInput.value = parseEntries(settings.team).join('\n');
     unavailableInput.value = parseEntries(settings.unavailable).join('\n');
+    showTeamInput.checked = settings.showTeam !== false;
+    showRandomInput.checked = settings.showRandom !== false;
     addReviewerInput.checked = settings.addReviewer !== false;
     addAssigneeInput.checked = settings.addAssignee !== false;
     hideSelfInput.checked = settings.hideSelf !== false;
+    replaceExistingInput.checked = settings.replaceExisting === true;
 }
 
 async function save() {
@@ -76,13 +85,21 @@ async function save() {
         return;
     }
 
+    if (!showTeamInput.checked && !showRandomInput.checked) {
+        setStatus('Active au moins la liste de l\'equipe ou le tirage au hasard.', true);
+        return;
+    }
+
     await chrome.storage.local.set({
         token: tokenInput.value.trim(),
         team,
         unavailable,
+        showTeam: showTeamInput.checked,
+        showRandom: showRandomInput.checked,
         addReviewer: addReviewerInput.checked,
         addAssignee: addAssigneeInput.checked,
-        hideSelf: hideSelfInput.checked
+        hideSelf: hideSelfInput.checked,
+        replaceExisting: replaceExistingInput.checked
     });
 
     const teamLogins = new Set(team.map(entryLogin));
