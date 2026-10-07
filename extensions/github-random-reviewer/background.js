@@ -3,7 +3,7 @@ const API_ROOT = 'https://api.github.com';
 const DEFAULT_SETTINGS = {
     token: '',
     users: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
-    vacationUsers: [],
+    vacationUsers: ['apzpr'],
     excludeSelf: true,
     replaceExisting: false,
     requestReview: true
