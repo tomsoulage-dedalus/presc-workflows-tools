@@ -1,16 +1,6 @@
-const API_ROOT = 'https://api.github.com';
+importScripts('./defaults.js');
 
-const DEFAULT_SETTINGS = {
-    token: '',
-    team: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
-    unavailable: ['apzpr'],
-    showTeam: true,
-    showRandom: true,
-    addReviewer: true,
-    addAssignee: true,
-    hideSelf: true,
-    replaceExisting: false
-};
+const API_ROOT = 'https://api.github.com';
 
 function parseTeam(value) {
     const raw = Array.isArray(value) ? value : String(value || '').split(/[\n,;]+/);

@@ -1,15 +1,3 @@
-const DEFAULT_SETTINGS = {
-    token: '',
-    team: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
-    unavailable: [],
-    showTeam: true,
-    showRandom: true,
-    addReviewer: true,
-    addAssignee: true,
-    hideSelf: true,
-    replaceExisting: false
-};
-
 const tokenInput = document.getElementById('token');
 const teamInput = document.getElementById('team');
 const unavailableInput = document.getElementById('unavailable');
@@ -62,9 +50,7 @@ function setStatus(text, isError) {
     }, 4000);
 }
 
-async function restore() {
-    const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
-
+function fill(settings) {
     tokenInput.value = settings.token || '';
     teamInput.value = parseEntries(settings.team).join('\n');
     unavailableInput.value = parseEntries(settings.unavailable).join('\n');
@@ -74,6 +60,16 @@ async function restore() {
     addAssigneeInput.checked = settings.addAssignee !== false;
     hideSelfInput.checked = settings.hideSelf !== false;
     replaceExistingInput.checked = settings.replaceExisting === true;
+}
+
+async function restore() {
+    fill(await chrome.storage.local.get(DEFAULT_SETTINGS));
+}
+
+function reset() {
+    // Le token est conserve : il n'a pas de valeur par defaut utile.
+    fill({ ...DEFAULT_SETTINGS, token: tokenInput.value });
+    setStatus('Valeurs par defaut chargees. Clique sur Enregistrer pour les appliquer.', false);
 }
 
 async function save() {
@@ -110,4 +106,5 @@ async function save() {
 }
 
 document.getElementById('save').addEventListener('click', save);
+document.getElementById('reset').addEventListener('click', reset);
 restore();

@@ -33,6 +33,11 @@ Clic droit sur l'icone de l'extension > **Options** (ou lien *Options* dans la p
 
 Au moins un affichage (liste / hasard) et au moins une action (revue / assignation) doivent rester coches.
 
+Les valeurs par defaut vivent dans `defaults.js` (partage par le service worker et la page d'options).
+Elles ne s'appliquent **que tant que rien n'a ete enregistre** : une fois les options sauvegardees,
+ce sont les valeurs de `chrome.storage.local` qui priment. Le bouton *Valeurs par defaut* recharge
+`defaults.js` dans le formulaire (il reste a cliquer sur *Enregistrer*).
+
 Le tirage se fait parmi `membres - indisponibles - auteur - personnes deja sur la PR (reviewer, assignee ou ayant relu)`.
 
 ### Token requis
