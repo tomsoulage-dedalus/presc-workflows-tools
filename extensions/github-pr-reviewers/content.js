@@ -15,8 +15,10 @@ const STATUS_TITLES = {
 let currentBoard = null;
 let busy = false;
 
+// Volontairement limite a l'onglet "Conversation" (celui qui porte la sidebar
+// Reviewers / Assignees) : pas de panneau sur /files, /commits, /checks...
 function parsePullRequestUrl() {
-    const match = window.location.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    const match = window.location.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/);
 
     if (!match) {
         return null;
