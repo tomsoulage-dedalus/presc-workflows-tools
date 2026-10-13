@@ -30,6 +30,7 @@ Clic droit sur l'icone de l'extension > **Options** (ou lien *Options* dans la p
 | Assigner la PR | Ajoute la personne aux assignees. Active par defaut. |
 | Exclure l'auteur de la PR | Retire l'auteur de la liste et du tirage. Active par defaut. |
 | Tirage : remplacer les assignes existants | Supprime les assignes actuels avant d'assigner la personne tiree. |
+| Afficher le lien Jira | Prefixe les titres de PR d'un logo Jira qui ouvre le ticket. Active par defaut. |
 
 Au moins un affichage (liste / hasard) et au moins une action (revue / assignation) doivent rester coches.
 
@@ -62,6 +63,15 @@ n'apparait pas sur `/files`, `/commits`, `/checks`...) :
 - apres chaque action, le panneau se met a jour en place (pas de rechargement de page) et un toast
   confirme le resultat avec l'avatar de la personne ;
 - le bouton `↻` force un rafraichissement de l'etat de la PR.
+
+### Lien Jira
+
+Sur la liste `https://github.com/<owner>/<repo>/pulls` et sur la page d'une PR (tous onglets), le titre
+est prefixe d'un **logo Jira** des qu'il contient une cle de ticket (`fix(ORBISBUG-46494): ...`).
+Un clic ouvre `https://dedalus.atlassian.net/browse/<CLE>` dans un nouvel onglet. Desactivable dans
+les options (section *Jira*), effet immediat sans recharger la page.
+
+Le code est isole dans `jira.js`, `jira-logo.js` et `jira.css` (entree `content_scripts` dediee).
 
 Les memes controles sont disponibles dans la popup de l'extension (icone de la barre d'outils).
 

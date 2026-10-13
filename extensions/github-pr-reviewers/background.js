@@ -45,7 +45,8 @@ async function getSettings() {
         addReviewer: stored.addReviewer !== false,
         addAssignee: stored.addAssignee !== false,
         hideSelf: stored.hideSelf !== false,
-        replaceExisting: stored.replaceExisting === true
+        replaceExisting: stored.replaceExisting === true,
+        showJiraLinks: stored.showJiraLinks !== false
     };
 }
 
