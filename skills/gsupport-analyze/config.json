@@ -286,6 +286,30 @@
       ]
     }
   ],
+  "_ownershipBoundariesComment": "Frontieres de responsabilite entre equipes, utilisees a l'etape 2b (cadrage). Chaque entree decrit une donnee que le workflow de prescription CONSOMME et AFFICHE sans la produire : le bug est alors chez le producteur, pas chez nous. C'est ce qui evite de lancer une investigation complete sur du code qui ne fait que du rendu. A etoffer des qu'un ticket se revele hors perimetre : la conclusion d'aujourd'hui doit couter zero agent demain.",
+  "ownershipBoundaries": [
+    {
+      "name": "out-of-formulary",
+      "label": "Indicateur hors livret therapeutique",
+      "aliases": [
+        "out of formulary",
+        "hors livret",
+        "livret therapeutique",
+        "non referenced drug",
+        "ausserhalb der Hausliste",
+        "Hausliste"
+      ],
+      "data": "ProductPharmaData.outFormulary",
+      "producer": "DDM (referentiel medicament)",
+      "ourResponsibility": "affichage seul : le workflow de prescription affiche l'icone a partir de la valeur recue, sans jamais la calculer ni la modifier",
+      "evidence": [
+        "outFormulary",
+        "ProductPharmaData",
+        "outOfFormulary"
+      ],
+      "verdict": "Une valeur d'indicateur jugee incorrecte par le client releve de DDM. Cote prescription, ne verifier qu'une chose : que la valeur recue est affichee telle quelle."
+    }
+  ],
   "_glossaryComment": "Jargon client -> terme technique. Sert a traduire le vocabulaire d'un ticket avant de router vers un domaine et avant tout git grep. A etoffer au fil des tickets : chaque terme client mal compris lors d'une analyse doit etre ajoute ici.",
   "glossary": [
     {

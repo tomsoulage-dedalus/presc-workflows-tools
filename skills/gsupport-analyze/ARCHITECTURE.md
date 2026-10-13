@@ -31,6 +31,7 @@ flowchart TD
         E0["Étape 0<br/>Résoudre la clé : message, puis<br/>historique de saisie du CLI,<br/>valider le préfixe GSUPPORT-"]
         E1["Étape 1 — jamais bloquante<br/>Conseil /allow-all + vérif. du modèle"]
         E1B["Étape 1b — optionnelle<br/>Pré-analyse utilisateur :<br/>couche, domaine, repos exclus, piste"]
+        E2B["Étape 2b — CADRAGE<br/>jamais déléguée<br/>Énoncé falsifiable, donnée en cause,<br/>frontière de responsabilité, validation"]
         E3["Étape 3<br/>Router le domaine, choisir les repos,<br/>filtrer par version, résoudre origin/branche"]
         E5["Étape 5 — QUALIFICATION<br/>jamais déléguée"]
         E6["Étapes 6 et 7<br/>Hypothèses, infos manquantes, actions"]
@@ -52,7 +53,9 @@ flowchart TD
     end
 
     E0 --> E1 --> E1B --> A2
-    A2 -->|compte-rendu-jira.md| E3
+    A2 -->|compte-rendu-jira.md| E2B
+    E2B -->|cadrage.md| E3
+    E2B -.->|frontière posée :<br/>1 seul agent, mandat « affichage seul »| E3
     E3 --> A4A & A4B & A4C
     A4A & A4B & A4C -->|compte-rendu-code-repo.md| E5
     E5 --> E6 --> E89 --> R([".copilot/analyses/&lt;KEY&gt;-analyse.md"])
@@ -60,12 +63,14 @@ flowchart TD
     A4A & A4B & A4C -.->|libellé ou règle introuvable,<br/>piste de paramétrage| A4D
     A4D -.->|compte-rendu-code-repo.md| E5
 
-    CFG[(config.json<br/>domains, glossary,<br/>repositories, agents)] -.-> E3
+    CFG[(config.json<br/>domains, ownershipBoundaries,<br/>glossary, repositories, agents)] -.-> E3
+    CFG -.->|frontières entre équipes| E2B
     E1B -.->|périmètre imposé : repos écartés| E3
     CFG -.->|model + reasoningEffort| A2
     CFG -.->|model + reasoningEffort| A4A
 
     style E5 fill:#fde2e2,stroke:#c0392b,stroke-width:2px
+    style E2B fill:#fde2e2,stroke:#c0392b,stroke-width:2px
     style CFG fill:#eef3fb,stroke:#4a6fa5
 ```
 
@@ -75,6 +80,7 @@ flowchart TD
 |---|---|---|
 | Étapes 0, 1, 1b — résolution et validation de la clé, conseil de permissions, modèle, pré-analyse utilisateur | orchestrateur | — |
 | Étape 2 — collecte Jira (ticket, commentaires, pièces jointes, archives, liens) | 1 sous-agent, `agents.jiraCollect` | `compte-rendu-jira.md` |
+| Étape 2b — cadrage : énoncé falsifiable, frontière de responsabilité, validation utilisateur | orchestrateur | `cadrage.md` |
 | Étape 3 — routage domaine, sélection des repos, résolution de branche | orchestrateur | tableau affiché |
 | Étape 4 — investigation du code | 1 sous-agent par repo, en parallèle, `agents.codeInvestigate` | `compte-rendu-code-<repo>.md` |
 | Étape 4 — second passage sur les repos `optIn`, si la première vague le justifie | idem, déclenché par l'orchestrateur | `compte-rendu-code-<repo>.md` |
@@ -83,6 +89,7 @@ flowchart TD
 Ne se délègue **jamais** :
 
 - toute question à l'utilisateur (`ask_user`) — un sous-agent ne sait pas dialoguer ;
+- le cadrage (étape 2b) : il décide de ce qu'on cherche et de qui est responsable ;
 - la qualification (étape 5), raison d'être du skill ;
 - l'écriture du rapport final.
 
@@ -94,16 +101,19 @@ flowchart LR
         J["issue.json<br/>comments.json<br/>remotelink.json"]
         PJ["pièces jointes<br/>extracted/&lt;archive&gt;/..."]
         DJ["compte-rendu-jira.md"]
+        CAD["cadrage.md"]
         DC["compte-rendu-code-&lt;repo&gt;.md"]
     end
 
     A2["Sous-agent Jira"] --> J --> PJ --> DJ
     A4["Sous-agents code"] --> DC
+    O2B["Orchestrateur — étape 2b"] --> CAD
 
     A2 -.->|synthèse ≤ 30 lignes| O["Orchestrateur"]
     A4 -.->|synthèse ≤ 30 lignes| O
     DJ -->|relecture ciblée<br/>## Symptôme, ## Commentaires| O
-    DC -->|relecture ciblée<br/>## Verdict du repo| O
+    CAD -->|recopié dans le prompt<br/>de chaque agent code| A4
+    DC -->|relecture ciblée<br/>## Verdict du repo,<br/>## Origine de la donnée| O
     O --> REP["&lt;KEY&gt;-analyse.md<br/>versionné dans le dépôt"]
 
     style REP fill:#e8f6ec,stroke:#2e7d4f
@@ -145,7 +155,44 @@ La section `## Pistes de recherche` du compte rendu (3 à 8 chaînes exactes : m
 d'écran, code, nom de bouton, classe d'une stacktrace) est le livrable le plus important de
 l'étape 2 : c'est l'amorce des `git grep` de l'étape 4.
 
-## 6. Étape 3 — du vocabulaire client au bon repo, sur la bonne branche
+## 6. Étape 2b — cadrer avant de chercher
+
+Le piège des tickets GSUPPORT : **le client signale l'écran où il voit le symptôme, pas le
+composant qui le produit**. Une valeur fausse affichée dans le workflow de prescription arrive donc
+chez nous, même quand elle est calculée par une autre équipe. Sans cadrage, l'étape 4 cherche une
+règle qui n'a jamais existé de notre côté, ne trouve rien, et conclut au mieux
+`Informations insuffisantes`, au pire à un faux bug.
+
+```mermaid
+flowchart TD
+    IN["compte-rendu-jira.md<br/>## Symptôme, ## Donnée en cause,<br/>## Parcours du ticket"] --> E1["1. Énoncé falsifiable<br/>observable + valeur constatée<br/>+ valeur attendue + cas de données"]
+    E1 --> E2{"2. Produisons-nous<br/>la donnée ?"}
+    OB[(ownershipBoundaries<br/>data, producer, evidence)] -.-> E2
+    HIST["Parcours du ticket<br/>changelog : équipes successives"] -.-> E2
+
+    E2 -->|oui, ou table muette| FULL["Périmètre complet<br/>→ étape 3 normale"]
+    E2 -->|frontière probable| RED["3. Investigation réduite<br/>1 agent, mandat « prouver que<br/>la valeur est affichée telle quelle »"]
+
+    RED --> V{"Le code confirme ?"}
+    V -->|oui, extrait à l'appui| HP["Qualification<br/>Hors périmètre — autre équipe"]
+    V -->|non : mapping, filtre,<br/>défaut, condition| FULL
+
+    FULL & RED --> ASK["4. Validation utilisateur (ask_user)<br/>Oui / Non, je corrige / Élargis"]
+    ASK --> CAD["cadrage.md<br/>recopié dans le prompt<br/>de chaque agent code"]
+
+    style E2 fill:#fde2e2,stroke:#c0392b,stroke-width:2px
+    style OB fill:#eef3fb,stroke:#4a6fa5
+```
+
+Deux garde-fous symétriques :
+
+- **jamais de « hors périmètre » sans preuve dans le code.** `ownershipBoundaries` fournit une
+  hypothèse, pas un verdict : sans extrait montrant que la valeur est rendue sans transformation,
+  la qualification reste `Informations insuffisantes` ;
+- **toute frontière découverte s'écrit dans `ownershipBoundaries`.** Une frontière établie
+  aujourd'hui doit coûter zéro sous-agent au prochain ticket — c'est tout l'intérêt du bloc.
+
+## 7. Étape 3 — du vocabulaire client au bon repo, sur la bonne branche
 
 Le client écrit « impossible de stopper la ligne ». Le code, lui, s'appelle
 `StopPrescriptionLineService`. L'étape 3 ne fait qu'une chose : cette traduction, puis elle en
@@ -192,15 +239,17 @@ Deux invariants de l'étape 4 qui découlent d'ici :
 - **ne jamais chercher dans les fichiers du disque** — ils sont sur une branche quelconque, ce
   serait une analyse du mauvais code, donc une qualification fausse.
 
-## 7. Étape 5 — la seule étape qui décide
+## 8. Étape 5 — la seule étape qui décide
 
 ```mermaid
 flowchart TD
     IN1["compte-rendu-jira.md<br/>## Symptôme, ## Commentaires"] --> Q
-    IN2["compte-rendu-code-*.md<br/>## Verdict du repo"] --> Q
+    IN2["compte-rendu-code-*.md<br/>## Verdict du repo,<br/>## Origine de la donnée"] --> Q
+    IN3["cadrage.md<br/>frontière de responsabilité"] --> Q
     Q{"Qualification<br/>1 catégorie + confiance"}
 
     Q --> C1["Bug dans notre code → ORBISBUG"]
+    Q --> C6["Hors périmètre — autre équipe → réassignation"]
     Q --> C2["Configuration / données → support, déploiement"]
     Q --> C3["Comportement attendu → réponse fonctionnelle"]
     Q --> C4["Évolution → HORME"]
@@ -209,11 +258,12 @@ flowchart TD
     G1["Compte rendu muet ≠ preuve d'absence :<br/>vérifier ## Pistes non concluantes,<br/>refaire la recherche si le motif exact manque"] -.-> Q
     G2["Verdicts contradictoires, repo absent,<br/>PJ ou archive illisible → baisser la confiance"] -.-> Q
     G3["Ne jamais conclure « bug » par défaut<br/>faute d'information"] -.-> Q
+    G4["« Hors périmètre » exige un extrait de code :<br/>sinon → Informations insuffisantes"] -.-> Q
 
     style Q fill:#fde2e2,stroke:#c0392b,stroke-width:2px
 ```
 
-## 8. Reprise sur incident
+## 9. Reprise sur incident
 
 | Situation | Comportement |
 |---|---|
@@ -225,12 +275,14 @@ flowchart TD
 | Confirmations de permissions à répétition | Conseiller `/allow-all` en une ligne et **continuer** — ne jamais suspendre l'analyse en attendant que l'utilisateur le tape |
 | Clé absente du message déclencheur (slash-command : le CLI n'en transmet pas l'argument) | La relire dans `~/.copilot/command-history-state.json`, annoncer « clé reprise de ta commande », ne demander qu'en dernier recours |
 
-## 9. Ce qu'il faut entretenir
+## 10. Ce qu'il faut entretenir
 
 `config.json` est la connaissance du skill, pas de la configuration figée. Il vieillit vite :
 
 - `domains.aliases` — le vocabulaire réel des clients, en FR / EN / DE ;
 - `glossary` — tout terme client rencontré et absent doit y être ajouté ;
+- `ownershipBoundaries` — les données produites par une autre équipe et seulement affichées chez
+  nous ; toute frontière établie lors d'une analyse s'y ajoute, sinon elle sera réinvestiguée ;
 - `domains.paths` et `grepSeeds` — à corriger dès qu'un chemin ne renvoie plus rien ;
 - `repositories.versionRange` — à mettre à jour à chaque bascule de version ;
 - `excludedRepositories` — les repos hors périmètre permanent (packaging, livraison) et leur motif ;
