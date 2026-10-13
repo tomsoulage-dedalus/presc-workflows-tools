@@ -7,6 +7,7 @@ const addReviewerInput = document.getElementById('addReviewer');
 const addAssigneeInput = document.getElementById('addAssignee');
 const hideSelfInput = document.getElementById('hideSelf');
 const replaceExistingInput = document.getElementById('replaceExisting');
+const showJiraLinksInput = document.getElementById('showJiraLinks');
 const statusLabel = document.getElementById('status');
 
 function parseEntries(value) {
@@ -60,6 +61,7 @@ function fill(settings) {
     addAssigneeInput.checked = settings.addAssignee !== false;
     hideSelfInput.checked = settings.hideSelf !== false;
     replaceExistingInput.checked = settings.replaceExisting === true;
+    showJiraLinksInput.checked = settings.showJiraLinks !== false;
 }
 
 async function restore() {
@@ -95,7 +97,8 @@ async function save() {
         addReviewer: addReviewerInput.checked,
         addAssignee: addAssigneeInput.checked,
         hideSelf: hideSelfInput.checked,
-        replaceExisting: replaceExistingInput.checked
+        replaceExisting: replaceExistingInput.checked,
+        showJiraLinks: showJiraLinksInput.checked
     });
 
     const teamLogins = new Set(team.map(entryLogin));

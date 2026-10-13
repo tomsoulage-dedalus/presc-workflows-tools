@@ -10,5 +10,6 @@ const DEFAULT_SETTINGS = {
     addReviewer: true,
     addAssignee: true,
     hideSelf: true,
-    replaceExisting: false
+    replaceExisting: false,
+    showJiraLinks: true
 };

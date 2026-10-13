@@ -1,0 +1,19 @@
+.gh-pr-jira {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+    vertical-align: middle;
+    line-height: 0;
+    opacity: 0.85;
+}
+
+.gh-pr-jira:hover {
+    opacity: 1;
+}
+
+/* Suit la typo du titre : grand dans l'en-tete de PR, petit dans la liste. */
+.gh-pr-jira__logo {
+    display: block;
+    width: 0.85em;
+    height: 0.85em;
+}

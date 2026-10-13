@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "GitHub PR Reviewers",
   "version": "2.0.0",
-  "description": "Ajoute un reviewer/assignee sur une PR GitHub en un clic depuis la liste de l'equipe, ou par tirage au hasard.",
+  "description": "Ajoute un reviewer/assignee sur une PR GitHub en un clic depuis la liste de l'equipe, ou par tirage au hasard. Lien Jira sur les titres de PR.",
   "permissions": ["storage", "activeTab", "tabs"],
   "host_permissions": ["https://api.github.com/*"],
   "options_page": "options.html",
@@ -30,6 +30,12 @@
       "matches": ["https://github.com/*/*/pull/*"],
       "js": ["content.js"],
       "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["jira-logo.js", "jira.js"],
+      "css": ["jira.css"],
       "run_at": "document_idle"
     }
   ]
