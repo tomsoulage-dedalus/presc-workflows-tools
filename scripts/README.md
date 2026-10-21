@@ -1,12 +1,26 @@
+# Scripts utilitaires
+
+Les commandes abrégées du catalogue supposent des alias locaux. Sans alias,
+utiliser `bash scripts/<nom>.sh` depuis la racine de ce dépôt, ou le chemin
+absolu du script depuis un autre dépôt.
+
+Avant utilisation, adapter les chemins locaux : `REPOS_BASE_DIR` dans
+`merge-commit-to-branch.sh`, `WORK_DIR` dans `switch-branch-all-repos.sh` et
+`OAS_BASE_DIR` dans `listenOAS.sh` pointent actuellement vers `/home/orbisu/work`.
+Les scripts de build et de déploiement ont leur propre configuration décrite
+ci-dessous.
+
 ## Catalogue des scripts
 
 | Script                     | Commande                                               | Quand | Avantage                                                                              | Description                                                                                                                                                |
 |----------------------------|--------------------------------------------------------|---|---------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **create-war-and-deploy**  | `create-war-and-deploy <TICKET> [options] [mvn args]`  | n'importe quelle branche | Build + deploy ORME packagés avec mapping de version configurable                     | Résout le bon snapshot Nexus via une ligne de version (`--version-line`), construit `orbis-medication.war`, puis lance le script de déploiement configuré |
 | **patch-presc-front**      | `patch-presc-front [--war PATH] [--skip-build]`        | après la construction d'un WAR | Test rapide d'un frontend local sans reconstruire le WAR                              | Construit le frontend Prescription, sauvegarde le WAR, remplace `webapp/prescription/` et vérifie l'archive |
-| **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Merge un defect dans une autre version dans un worktree distinct                      | Merge les commits d'un defect/story dans une autre version. Repo utilisé: `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
+| **merge-commit-to-branch** | `merge-commit-to-branch <TICKET> [--repo]`             | n'importe quelle branche | Porte un ticket dans une autre version dans un worktree distinct | Cherry-pick des commits d'un defect/story vers une ou plusieurs versions. Repo utilisé : `orme-prescription` par défaut, `--repo` propose une liste des repos disponibles |
 | **switch-branch-all-repos** | `switch-branch-all-repos`                             | n'importe quelle branche | Modifie la branche courante de tous les repos locaux en une seule commande            | Modifie et met à jour la branche courante de tous les repos locaux                                                                                         |
 | **update-lib**             | `update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | dans un repo prescription-app/prescription-lib | Met à jour une/des dépendance.s npm et crée le.s commit.s dédié en une seule commande | Demande un `BUG_ID` (ou l'accepte via `--bug`), choisit une branche `*/develop` comme base, vérifie les changements en cours, crée la branche `bugfix`/`quality`, met à jour la lib choisie et commit. `--test` enchaîne aussi `npm install`, la vérification du proxy et `npm start` |
+| **deploy-docker** | `deploy-docker [--war PATH] [--container NAME]` | WAR déjà construit et conteneur OAS démarré | Déploie sans reconstruire le WAR | Copie le WAR dans le conteneur et le déploie via JBoss CLI |
+| **listenOAS** | `listenOAS [--level DEBUG\|INFO\|WARN\|ERROR] [--no-exclude]` | instance OAS locale | Suit les logs avec filtre de sévérité | Sélectionne une instance, suit `server/log/server.log` et exclut le bruit `UT005108` par défaut |
 
 ## Exemples d'utilisation
 
@@ -165,7 +179,7 @@ remplacement ou la vérification échoue.
 ```
 ./scripts/merge-commit-to-branch.sh ORBISBUG-123
 ```
-> Trouve la/les branche liée au bug dans le repo `orme-prescription`, demande de choisir une ou plusieurs versions de destination (numéros séparés par des virgules, ou `all`), crée la nouvelle branche pour chacune, merge le/les commit, propose d'ouvrir l'interface de résolution Intellij en cas de conflit et push
+> Recherche d'abord les commits du ticket sur les branches distantes `*/develop` ; à défaut, propose les commits d'une branche du ticket avec confirmation. Demande de choisir une ou plusieurs versions de destination (numéros séparés par des virgules, ou `all`), crée une branche dans un worktree temporaire pour chacune, cherry-pick les commits, propose la résolution IntelliJ en cas de conflit et push. La branche de travail initiale n'est pas modifiée.
 ```
 ./scripts/merge-commit-to-branch.sh ORBISBUG-123 --repo
 ```
@@ -178,3 +192,53 @@ remplacement ou la vérification échoue.
 ```
 > Pour chaque repo local, propose de changer la branche courante en listant les branches dev existantes et de mettre à jour la branche
 ---
+
+### `update-lib`
+
+Depuis un dépôt contenant `frontend/prescription-app` et `frontend/prescription-lib` :
+
+```bash
+bash /chemin/vers/presc-workflows-tools/scripts/update-lib.sh --bug ORBISBUG-135 --lib @medication-statement/lib --test
+```
+
+Le script peut aussi rechercher un dépôt voisin, ou utiliser `PRESC_REPO_DIR`
+si le dépôt courant ne contient pas ces deux projets.
+Il sélectionne une base `*/develop`, crée une branche `presc/bugfix/<BUG_ID>`
+pour les préfixes connus (`ORBISBUG`, `HDEFECT`, `HORME`), ou
+`presc/quality/<BUG_ID>` pour un suffixe libre.
+Chaque dépendance mise à jour fait l'objet d'un commit ; il propose ensuite
+d'en ajouter une autre, de pousser et de créer une PR.
+L'option `--test` enchaîne `npm install`, la vérification du proxy et
+`npm start` : elle ne désigne pas l'exécution des tests unitaires.
+
+### `deploy-docker`
+
+Le WAR par défaut est
+`${PRESC_ADMIN_REPO}/deployment/presc-admin-war/target/orme-presc-admin.war`,
+avec `PRESC_ADMIN_REPO` valant `${HOME}/repos/orme-presc-admin` si non exporté.
+Le conteneur par défaut est `oas-orme-medication`.
+Docker doit être accessible et le conteneur démarré.
+
+```bash
+bash scripts/deploy-docker.sh
+bash scripts/deploy-docker.sh --war /chemin/vers/orbis-medication.war --container oas-orme-medication
+```
+
+Le script copie le WAR dans `/tmp` du conteneur, appelle JBoss CLI avec
+`deploy --force`, puis nettoie la copie temporaire.
+
+### `listenOAS`
+
+Adapter `OAS_BASE_DIR` en haut du script pour pointer vers le dossier contenant
+les instances OAS locales. Le script sélectionne automatiquement une instance
+si elle est seule, sinon propose un choix.
+
+```bash
+bash scripts/listenOAS.sh
+bash scripts/listenOAS.sh --level WARN
+bash scripts/listenOAS.sh --level ERROR --no-exclude
+```
+
+`--level` fixe le niveau minimum (`DEBUG < INFO < WARN < ERROR`) et conserve
+aussi les lignes `Caused by:`. Sans filtre, toutes les lignes sont suivies.
+`--no-exclude` désactive l'exclusion par défaut des lignes `UT005108`.

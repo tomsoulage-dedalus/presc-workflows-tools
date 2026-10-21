@@ -16,7 +16,7 @@ Basé sur la doc EDP :
 1. Ouvre `chrome://extensions`
 2. Active le **mode développeur** (toggle en haut à droite)
 3. Clique sur **Charger l'extension non empaquetée**
-4. Sélectionne le dossier ``
+4. Sélectionne le dossier `extensions/edp-postmessage-extension`
 5. Épingle l'extension dans la barre d'outils Chrome
 
 ## Utilisation
@@ -32,4 +32,5 @@ Basé sur la doc EDP :
 - Le "Add drug" avec le champ Product ID vide envoie un `content` vide (`""`) → ouvre la recherche produit, comme `window.postMessage('{"type":"orme.drug.add", "content":"" }', '*')` dans la doc.
 - La suppression (`orme.drug.delete`) ne fonctionne que sur les lignes **non signées** ; si plusieurs lignes existent avec le même produit, la suppression n'est pas effectuée (comportement de l'app, pas de l'extension).
 - Le message est injecté via `chrome.scripting.executeScript` (`world: "MAIN"`) sur l'onglet actif, ce qui équivaut exactement à taper `window.postMessage(...)` dans la console de cet onglet.
+- L'injection cible la fenêtre principale de l'onglet, pas ses iframes. Ouvre directement la page EDP si elle est intégrée dans une iframe.
 - Cette extension ne modifie rien côté serveur/app : elle se contente d'émettre le même `postMessage` que tu ferais manuellement.
