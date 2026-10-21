@@ -1,14 +1,19 @@
 # presc-workflows-tools
 
-Skills GitHub Copilot CLI pour le repo `orme-prescription` — automatisation du workflow de développement Angular (Jira, branches, implémentation, review, lint, PR).
+Skills GitHub Copilot CLI pour le repo `orme-prescription` — automatisation du workflow de développement Angular et Java / Jakarta EE (Jira, branches, implémentation, tests, review, lint, PR).
 
 ## Prérequis
 
-- [GitHub Copilot CLI](https://githubnext.com/projects/copilot-cli) installé
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/install-copilot-cli) installé
 - `gh` CLI installé et authentifié (`gh auth login`)
 - Variables d'environnement Jira dans `~/.bashrc` :
   - `JIRA_DOMAIN` (ex: `jira.dedalus.com`)
   - `JIRA_API_TOKEN` (Personal Access Token Jira)
+
+**Jira Cloud :** les contrats des skills Jira de ce dépôt décrivent encore
+l'ancienne configuration Jira Server (`jira.dedalus.com`, PAT). Ils ne
+documentent pas encore l'authentification Cloud par e-mail et API token ;
+changer uniquement `JIRA_DOMAIN` ne suffit pas à adapter les commandes.
 
 ## Installation
 
@@ -30,11 +35,11 @@ Voir [SETUP.md](SETUP.md) pour les détails et la désinstallation.
 | **task-implement** | `/task-implement` | branche de la tâche | Faire `/clear` avant — le contexte est dans `ANALYZE.md`                   | Implémente le code (🟠 Java/Jakarta EE back et/ou 🔵 Angular front) en s'appuyant sur les règles du projet et les leçons passées              |
 | **test-check**     | `/test-check` | branche de la tâche | Détecte les régressions avant la PR, évite les surprises en CI             | Vérifie que les changements n'ont pas cassé de tests existants (🔵 Angular + 🟠 Java) — appelle `/test-implement` si des tests échouent       |
 | **test-implement** | `/test-implement` | branche de la tâche | Génère le boilerplate des tests manquants automatiquement                  | Écrit et corrige les tests (🔵 specs Angular + 🟠 tests JUnit) pour les fichiers sans couverture et les tests en échec                        |
-| **code-review**    | `/code-review` | branche de la tâche | Catch les erreurs avant la review humaine, enrichit `lessons.md`           | Review IA du diff (règles front + back + leçons passées)                                                                                      |
+| **code-review**    | `/code-review` | branche de la tâche | Catch les erreurs avant la review humaine, enrichit `lessons.md`           | Review IA du diff Angular (règles front et leçons passées)                                                                                      |
 | **code-lint**      | `/code-lint` | branche de la tâche | Format + lint auto-fix, commit optionnel — jamais de push automatique      | Prettier + ESLint auto-fix sur les fichiers modifiés, puis propose un commit des corrections                                                  |
-| **pr-create**      | `/pr-create` | branche de la tâche | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Génère et crée la Pull Request GitHub (draft) vers `develop` avec le bon format de titre et le label WORKFLOWS                                |
-| **pr-fix-comment** | `/pr-fix-comment` | branche de la tâche | Fix ciblé sans avoir à retrouver le contexte du commentaire                | Fixe un commentaire de review Copilot sur la PR courante                                                                                      |
+| **pr-create**      | `/pr-create` | branche de la tâche déjà poussée | Titre formaté `feat/fix(TICKET)`, label WORKFLOWS, body généré depuis Jira | Crée la Pull Request GitHub (draft) vers `develop` (ou `main` si absente), avec le bon format de titre et le label WORKFLOWS |
 | **pr-fix-build**   | `/pr-fix-build <branch> <fix>` | n'importe quelle branche | Corrige la branche d'une PR sans `git stash` ni `checkout`                 | Corrige le build d'une branche distante (format, lint, tests) sans changer de branche locale                                                  |
+| **story-architecture-diagram** | `/story-architecture-diagram` | architecture déjà définie | Formalise les décisions et les flows sans écrire de code | Produit un rapport d'architecture et des diagrammes Mermaid depuis un fichier, le contexte courant ou un échange guidé |
 
 ## Contribuer à un skill
 
@@ -63,17 +68,17 @@ Deux réflexes qui vont avec :
 
 ### `/task-start`
 ```
-/task-start ORBIS-1234
+/task-start ORBISBUG-1234
 ```
-> Crée la branche `presc/feature/ORBIS-1234` depuis `develop`, puis lance automatiquement `/task-analyze ORBIS-1234`.
+> Crée la branche `main/presc/bugfix/ORBISBUG-1234` depuis la branche courante, puis lance automatiquement `/task-analyze ORBISBUG-1234`. Pour une story `HORME-1234`, le nom est `main/presc/feature/HORME-1234`. Se placer sur la branche de base souhaitée avant de lancer la commande.
 
 ---
 
 ### `/task-analyze`
 ```
-/task-analyze ORBIS-1234
+/task-analyze ORBISBUG-1234
 ```
-> Lit le ticket Jira, explore les fichiers impactés, propose des hypothèses d'implémentation et génère un `ANALYZE.md` local avec le plan de travail.
+> Lit le ticket Jira, explore les fichiers impactés, propose des hypothèses d'implémentation et génère `.copilot/analyses/ORBISBUG-1234-ANALYZE.md` avec le plan de travail.
 
 ---
 
@@ -120,7 +125,7 @@ Deux réflexes qui vont avec :
 ```
 /code-review
 ```
-> Analyse le diff `main...HEAD`, signale les violations des règles front/back et des leçons passées. Met à jour `lessons.md` si une nouvelle erreur bloquante est identifiée.
+> Analyse le diff Angular `main...HEAD` (`src/**/*.ts`, `src/**/*.html`, `src/**/*.scss`), signale les violations des règles front et des leçons passées. Met à jour `lessons.md` si une nouvelle erreur bloquante est identifiée.
 >
 > **`lessons.md`** — fichier local qui accumule les erreurs récurrentes détectées lors des reviews précédentes. Il sert de mémoire long terme : chaque `/code-review` le consulte pour éviter de répéter les mêmes erreurs, et l'enrichit si une nouvelle erreur bloquante est identifiée.
 
@@ -138,33 +143,27 @@ Deux réflexes qui vont avec :
 ```
 /pr-create
 ```
-> Génère le titre au format `feat(HORME-XXXX): ... /fixed` ou `fix(ORBISBUG-XXXX): ... /fixed` depuis le ticket Jira, génère le body depuis les changements effectués, applique le label **WORKFLOWS** et crée la PR en draft vers `develop`.
-
----
-
-### `/pr-fix-comment`
-```
-/pr-fix-comment
-```
-> Liste les commentaires de review Copilot ouverts sur la PR, propose de choisir lequel fixer, applique le fix et push.
+> Depuis une branche déjà poussée, génère le titre au format `feat(HORME-XXXX): ... /fixed` ou `fix(ORBISBUG-XXXX): ... /fixed` depuis le ticket Jira, génère le body depuis les changements effectués, applique le label **WORKFLOWS** et crée la PR en draft vers `develop` (ou `main` si `develop` n'existe pas).
 
 ---
 
 ### `/pr-fix-build`
 ```
-/pr-fix-build presc/feature/ORBIS-5678
-/pr-fix-build presc/feature/ORBIS-5678 format
-/pr-fix-build presc/feature/ORBIS-5678 tests
+/pr-fix-build main/presc/bugfix/ORBISBUG-5678
+/pr-fix-build main/presc/bugfix/ORBISBUG-5678 format
+/pr-fix-build main/presc/bugfix/ORBISBUG-5678 tests
 ```
-> Checkout la branche d'une PR dans un worktree temporaire, applique le fix demandé (`format`, `tests`, ou les deux si omis), commit et push — sans toucher à ta branche locale.
+> Ouvre la branche d'une PR dans un worktree temporaire, applique le fix demandé (`format` ou `tests`), commit et push — sans toucher à ta branche locale. Si le type de fix est omis, le skill demande lequel appliquer.
 
 ---
 
-### `/update-lib`
+### `/story-architecture-diagram`
 ```
-/update-lib --bug ORBISBUG-135 --lib @medication-statement/lib --test
+/story-architecture-diagram
 ```
-> Crée une branche, met à jour la version de @medication-statement/lib dans les package-lock.json de prescription-app et prescription-lib, crée le commit, lance npm install, vérifie que le proxy pointe bien sur FR et lance npm start
+> Documente une architecture déjà décidée et produit un rapport avec des diagrammes Mermaid, sans concevoir la solution ni générer de code. Fournir un fichier, utiliser le contexte de conversation ou préciser l'architecture par questions/réponses.
+
+`update-lib` est un script shell, pas un skill : voir le [catalogue des scripts](../scripts/README.md#update-lib).
 
 ## Workflow
 
@@ -209,15 +208,11 @@ LINT_COMMIT -- "⏭️ non" --> PR
 LINT_DONE --> PR
 
 PR["/pr-create
-🚀 git push + Pull Request draft → develop"]
+Pull Request draft vers develop
+ou main si develop absente
+branche deja poussee"]
 
-PR --> COMMENTS{"Commentaires Copilot sur la PR ?"}
-
-COMMENTS -- "🔧 à fixer" --> FPC["/pr-fix-comment
-choix + fix + push"]
-
-FPC --> COMMENTS
-COMMENTS -- "✅ PR approuvée et mergée" --> DONE
+PR --> DONE
 
 DONE["✅ develop"]
 
