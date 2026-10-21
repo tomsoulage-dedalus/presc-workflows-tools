@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "jira_root_cause",
+  "version": "1.0.0",
+  "description": "Ajoute en un clic des root causes prédéfinies (préfixe rc_) dans les étiquettes d'un ticket Jira Cloud.",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.atlassian.net/browse/*",
+        "https://*.atlassian.net/issues*",
+        "https://*.atlassian.net/jira/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "jira_root_cause"
+  }
+}
