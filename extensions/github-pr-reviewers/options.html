@@ -92,6 +92,50 @@
             background-color: #f6f8fa;
         }
 
+        button:disabled {
+            cursor: wait;
+            opacity: 0.6;
+        }
+
+        .token-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .token-controls input {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .token-controls button {
+            flex-shrink: 0;
+            margin-left: 0;
+        }
+
+        #tokenCheck {
+            margin-top: 10px;
+        }
+
+        #tokenCheck ul {
+            padding-left: 20px;
+        }
+
+        #tokenCheck li {
+            margin-bottom: 6px;
+        }
+
+        #tokenCheck .success {
+            color: #1a7f37;
+        }
+
+        #tokenCheck .warning {
+            color: #9a6700;
+        }
+
+        #tokenCheck .error {
+            color: #cf222e;
+        }
+
         #status {
             margin-left: 12px;
             font-size: 13px;
@@ -109,12 +153,25 @@
     <div class="section">
         <div class="field">
             <label for="token">Token GitHub (PAT)</label>
-            <input id="token" type="password" autocomplete="off" placeholder="ghp_..." />
+            <div class="token-controls">
+                <input id="token" type="password" autocomplete="off" placeholder="ghp_..." />
+                <button id="testToken" class="secondary" type="button">Tester les autorisations</button>
+            </div>
             <p class="hint">
                 Token classique avec le scope <code>repo</code>, ou fine-grained avec les permissions
                 <code>Pull requests: Read and write</code> et <code>Issues: Read and write</code>.
                 Il est stocke uniquement dans le stockage local du navigateur.
             </p>
+            <label for="tokenTestRepository">Depot a verifier</label>
+            <input id="tokenTestRepository" type="text" placeholder="owner/repo" />
+            <p class="hint">
+                Le test utilise le token saisi, meme non enregistre, et les actions cochees ci-dessous.
+                Il ne modifie aucune PR. Ce depot sert uniquement au diagnostic, pas a limiter l'extension.
+            </p>
+            <div id="tokenCheck" role="status" hidden>
+                <p id="tokenCheckSummary"></p>
+                <ul id="tokenCheckDetails"></ul>
+            </div>
         </div>
     </div>
 
