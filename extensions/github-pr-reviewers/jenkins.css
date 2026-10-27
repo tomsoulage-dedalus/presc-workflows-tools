@@ -1,0 +1,48 @@
+.gh-jenkins-badge {
+    display: inline-block;
+    margin: 4px 8px;
+    padding: 2px 7px;
+    border: 1px solid var(--borderColor-danger-muted, #cf222e);
+    border-radius: 6px;
+    color: var(--fgColor-danger, #cf222e);
+    font-size: 12px;
+}
+
+.gh-jenkins-panel {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--borderColor-danger-muted, #cf222e);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.gh-jenkins-panel h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+}
+
+.gh-jenkins-panel button {
+    margin: 8px 8px 0 0;
+    padding: 4px 8px;
+    color: var(--fgColor-default, #1f2328);
+    background: var(--bgColor-muted, #f6f8fa);
+    border: 1px solid var(--borderColor-default, #d1d9e0);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.gh-jenkins-panel button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.gh-jenkins-panel pre {
+    max-height: 300px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.gh-jenkins-error {
+    color: var(--fgColor-danger, #cf222e);
+}

@@ -7,7 +7,7 @@ le debug de l'Externally Driven Prescription (EDP).
 
 | Extension | Utilisation | Configuration |
 |---|---|---|
-| [GitHub PR Reviewers](github-pr-reviewers/README.md) | Ajouter un reviewer / assignee manuellement ou au hasard, gérer les indisponibilités et ouvrir le ticket Jira depuis le titre d'une PR | Token GitHub et membres de l'équipe dans les options |
+| [GitHub PR Reviewers](github-pr-reviewers/README.md) | Ajouter un reviewer / assignee, gérer les indisponibilités, ouvrir Jira et diagnostiquer les builds Jenkins en échec | Token GitHub, équipe et périmètre Jenkins dans les options |
 | [Jira Root Cause](jira_root_cause/README.md) | Ajouter ou retirer des étiquettes `rc_` sur Jira Cloud, avec un maximum de deux root causes par ticket | Session Jira ouverte, aucun token à renseigner |
 | [EDP PostMessage Debugger](edp-postmessage-extension/README.md) | Envoyer les messages `orme.*` de debug sur la page EDP active | Champs de la popup, aucun token à renseigner |
 

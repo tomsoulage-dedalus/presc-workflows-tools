@@ -493,7 +493,9 @@ function observePageChanges() {
 }
 
 chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || busy) {
+    const boardSettings = ['token', 'team', 'unavailable', 'showTeam', 'showRandom',
+        'addReviewer', 'addAssignee', 'hideSelf', 'replaceExisting'];
+    if (area !== 'local' || busy || !boardSettings.some((key) => changes[key])) {
         return;
     }
 

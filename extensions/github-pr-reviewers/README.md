@@ -77,6 +77,64 @@ Les memes controles sont disponibles dans la popup de l'extension (icone de la b
 
 Les animations sont desactivees si le systeme est en `prefers-reduced-motion`.
 
+### Diagnostic Jenkins (V1)
+
+Dans les options, la section **Jenkins** permet d'activer le diagnostic et de choisir les
+depots et labels concernes. Le diagnostic est **desactive par defaut** : cocher son activation
+puis enregistrer pour l'utiliser. Le perimetre propose est `dedalus-cis4u/orme-prescription`,
+label `WORKFLOWS`. Une activation deja enregistree est conservee ; decocher l'option pour la retirer.
+Sans activation, aucun appel de diagnostic GitHub/Jenkins n'est effectue et aucun element Jenkins
+n'est affiche. Les reviewers, l'assignation, le tirage et les liens Jira restent independants.
+Tous les labels configures doivent etre presents ; une liste de depots vide desactive les appels.
+Le PAT existant est reutilise pour GitHub, jamais pour Jenkins, qui est interroge en anonyme.
+Un PAT fine-grained doit aussi permettre la lecture des **Commit statuses**.
+
+| Situation | Appels Jenkins automatiques |
+| --- | --- |
+| PR fermee / mergee, hors depot ou hors labels | Aucun |
+| Build vert, en cours ou absent | Aucun |
+| PR ouverte du perimetre, build en echec | Un appel pour les stages, si le build n'est pas en cache |
+
+Seul le contexte `continuous-integration/jenkins/pr-merge` est pris en compte.
+Les statuts des PR visibles sont recuperes en une requete GitHub groupee (100 PR maximum par
+lot). Jenkins est limite a trois requetes simultanees pour le chargement automatique.
+
+- **Liste des PR** : seul un build rouge recoit un badge avec le stage casse et un lien Jenkins.
+- **Page d'une PR** : un panneau Jenkins apparait pour un build rouge. Le bouton
+  **Charger le diagnostic** affiche les stages et leurs durees, puis les 60 dernieres lignes
+  du log du premier step en echec du stage responsable. La recuperation du log coute au plus
+  deux appels supplementaires. **Copier le diagnostic** prepare un prompt pour investigation.
+- Le service worker **reverifie l'etat GitHub au clic**, meme si le panneau est deja affiche :
+  fermer/merger la PR ou passer au vert empeche tout nouvel appel Jenkins.
+- Les stages et logs des builds termines sont conserves localement (100 entrees au total,
+  resume et log comptant chacun pour une entree). Les appels simultanes pour la meme ressource
+  sont mutualises ; un build en cours ou un appel en erreur n'est pas mis en cache.
+- Les mutations du DOM ne relancent pas les requetes pour les PR deja traitees. Les resultats
+  sont renouveles a la navigation ou au rechargement de la page, sans polling.
+- Les erreurs sont affichees explicitement. Le diagnostic peut etre retente au clic ; pour
+  actualiser les badges de la liste apres une erreur, recharger la page.
+
+Cette V1 ne consulte **pas SonarQube**, ne recupere pas les rapports JUnit, ne surveille pas les
+builds et ne poste aucun commentaire Copilot. Le serveur Jenkins est limite a
+`https://ci-jenkins.orbis.dedalus.com`.
+
+Apres mise a jour, recharger l'extension dans `chrome://extensions`, accepter l'acces au serveur
+Jenkins si Chrome le demande, puis recharger GitHub.
+
+### Verification locale
+
+Sans dependance npm, avec Node.js 22 :
+
+```bash
+node --test extensions/github-pr-reviewers/tests/*.test.cjs
+```
+
+Le test de rendu navigateur est optionnel :
+
+```bash
+CHROME_BIN=/usr/bin/google-chrome node --test extensions/github-pr-reviewers/tests/*.test.cjs
+```
+
 ## Icones
 
 Les PNG de `icons/` sont generes par un script sans dependance :

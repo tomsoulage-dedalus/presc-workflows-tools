@@ -1,4 +1,5 @@
 importScripts('./defaults.js');
+importScripts('./jenkins-background.js');
 
 const API_ROOT = 'https://api.github.com';
 
@@ -46,7 +47,10 @@ async function getSettings() {
         addAssignee: stored.addAssignee !== false,
         hideSelf: stored.hideSelf !== false,
         replaceExisting: stored.replaceExisting === true,
-        showJiraLinks: stored.showJiraLinks !== false
+        showJiraLinks: stored.showJiraLinks !== false,
+        showJenkins: stored.showJenkins === true,
+        jenkinsRepositories: stored.jenkinsRepositories,
+        jenkinsLabels: stored.jenkinsLabels
     };
 }
 
@@ -272,6 +276,14 @@ async function assignRandom({ owner, repo, number }) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (!message || !message.type) {
         return false;
+    }
+
+    if (message.type === 'GET_JENKINS_STATUSES' || message.type === 'GET_JENKINS_DETAIL') {
+        const action = message.type === 'GET_JENKINS_STATUSES' ? JenkinsTools.statuses : JenkinsTools.detail;
+        action(message.payload)
+            .then((data) => sendResponse({ ok: true, data }))
+            .catch((error) => sendResponse({ ok: false, error: error.message }));
+        return true;
     }
 
     if (message.type === 'GET_BOARD') {
