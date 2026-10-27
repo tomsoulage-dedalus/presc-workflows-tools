@@ -22,6 +22,7 @@ Clic droit sur l'icone de l'extension > **Options** (ou lien *Options* dans la p
 | Option | Description |
 | --- | --- |
 | Token GitHub (PAT) | Requis pour appeler l'API. Stocke dans `chrome.storage.local`. |
+| Tester les autorisations / Depot a verifier | Diagnostic du token saisi et des droits sur `owner/repo`, selon les actions cochees. Ne modifie aucune PR et n'enregistre pas le token. Le depot de test ne limite pas l'extension a ce depot. |
 | Membres de l'equipe | Un par ligne : `login` ou `login=Nom affiche`. L'ordre des lignes = l'ordre des boutons. Sert aussi de vivier pour le tirage. |
 | En conges / indisponibles | Logins grises dans la liste et **exclus du tirage**. |
 | Afficher la liste des membres | Affiche les boutons par membre. Active par defaut. |
@@ -47,6 +48,17 @@ Le tirage se fait parmi `membres - indisponibles - auteur - personnes deja sur l
 - Token fine-grained : `Pull requests: Read and write` + `Issues: Read and write` sur les depots concernes.
 
 Le token n'est jamais envoye ailleurs que vers `https://api.github.com`.
+
+Le bouton **Tester les autorisations** verifie l'identite, l'acces au depot, la lecture des PR
+et des revues (si une PR existe), ainsi que la lecture des issues si l'assignation est activee.
+Il controle les scopes quand GitHub les expose et distingue les droits du compte sur le depot
+des permissions accordees au token. Les erreurs 401, 403, 404, SSO et de limite de requetes sont
+affichees explicitement : un token valide peut ne pas avoir acces a un depot prive.
+
+Pour un token fine-grained, GitHub n'expose pas la liste de ses permissions dans ces reponses.
+Un acces en lecture ne prouve pas le droit d'ecriture : le diagnostic reste donc **partiel** et
+indique les permissions Write a confirmer dans les reglages du token. Il n'effectue aucune
+demande de revue, assignation ou autre ecriture pour les tester.
 
 ## Utilisation
 
