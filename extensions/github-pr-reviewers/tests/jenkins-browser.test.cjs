@@ -277,7 +277,12 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 window.dispatchEvent(new Event('popstate'));
                 await wait();
                 const fix = document.querySelector('.gh-jenkins-fix-prettier');
+                check(document.querySelector('.gh-jenkins-panel p').textContent === 'STEP FAILED: build - prettier failed', 'Confirmed Prettier failures must identify the build failure cause in the summary');
                 check(fix.textContent === 'Fix Prettier with Copilot', 'Confirmed Prettier failures must offer the fix action');
+                for (const theme of ['light', 'dark']) {
+                    document.body.dataset.theme = theme;
+                    check(getComputedStyle(fix).backgroundColor === 'rgb(9, 105, 218)' && getComputedStyle(fix).color === 'rgb(255, 255, 255)', 'Copilot fix action must stand out in blue with white text in both themes');
+                }
                 check(fix.previousElementSibling.getAttribute('aria-controls'), 'Fix action must sit beside the diagnostic toggle');
                 check(count('FIX_PRETTIER_WITH_COPILOT') === 0, 'Rendering must never post a Copilot request');
                 fix.click();

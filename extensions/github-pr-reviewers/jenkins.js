@@ -125,7 +125,8 @@
             header.append(link);
         }
         panel.append(header);
-        panel.append(element('p', status.error || `STEP FAILED: ${status.stage}`, status.error ? 'gh-jenkins-error' : null));
+        const failure = status.failureKind === 'prettier' ? 'build - prettier failed' : status.stage;
+        panel.append(element('p', status.error || `STEP FAILED: ${failure}`, status.error ? 'gh-jenkins-error' : null));
         const actions = element('div', null, 'gh-jenkins-actions');
         for (const report of status.sonarReports || []) {
             if (report.error) {
