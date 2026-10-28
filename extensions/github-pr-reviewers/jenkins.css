@@ -120,6 +120,16 @@
     margin: 0;
 }
 
+.gh-jenkins-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.gh-jenkins-controls button {
+    max-width: 100%;
+}
+
 .gh-jenkins-panel button {
     margin: 8px 8px 0 0;
     padding: 4px 8px;

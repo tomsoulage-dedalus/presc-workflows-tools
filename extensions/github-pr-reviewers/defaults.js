@@ -14,6 +14,6 @@ const DEFAULT_SETTINGS = {
     replaceExisting: false,
     showJiraLinks: true,
     showJenkins: true,
-    jenkinsRepositories: ['dedalus-cis4u/orme-prescription'],
+    jenkinsRepositories: ['dedalus-cis4u/orme-prescription', 'dedalus-cis4u/orme-prescription-api'],
     jenkinsLabels: ['WORKFLOWS']
 };

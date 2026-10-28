@@ -33,7 +33,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
             pre { margin: 0; }
             ${styles}
             </style></head><body>
-            <ul>${Array.from({ length: 11 }, (_, index) => index + 1).map((number) => `<li><div data-listview-item-title-container>
+            <ul>${Array.from({ length: 12 }, (_, index) => index + 1).map((number) => `<li><div data-listview-item-title-container>
                 ${number <= 2 ? '<a class="gh-pr-jira" href="https://dedalus.atlassian.net/browse/TEST-1">Jira</a>' : ''}
                 <a data-testid="listitem-title-link" href="/dedalus-cis4u/orme-prescription/pull/${number}">PR ${number}</a>
             </div></li>`).join('')}</ul>
@@ -45,6 +45,10 @@ test('renders badges and click-only diagnostics without DOM observer request loo
             const requests = [];
             const listeners = [];
             let detailError = false;
+            let fixError = false;
+            let confirmFix = false;
+            const confirmations = [];
+            window.confirm = (message) => { confirmations.push(message); return confirmFix; };
             const logText = Array.from({ length: 60 }, (_, index) =>
                 '13:46:24 [INFO] Build output line ' + index + ' ' + 'long-module-name-'.repeat(12)).join('\\n');
             const status = { number: 1, eligible: true, stage: '[BUILD] build all', buildUrl: 'https://ci-jenkins.orbis.dedalus.com/job/orme/42' };
@@ -54,7 +58,8 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 ['[DOCKER DEPLOY]: start container and check deployment', 'deploiement'],
                 ['[deploy] to nexus', 'nexus'],
                 ['[post] merge', 'merge'],
-                ['Custom pipeline stage', 'Custom pipeline stage']
+                ['Custom pipeline stage', 'Custom pipeline stage'],
+                ['[BUILD] build all', 'prettier']
             ];
             const listStatuses = new Map([
                 [2, { number: 2, eligible: true, stage: '[analyse] sonar front', buildUrl: status.buildUrl,
@@ -63,8 +68,9 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                     sonarReports: [{ label: 'Sonar back', url: 'https://sonarqube.orbis.dedalus.com/bdx-dev/dashboard?id=backend&pullRequest=3' }] }],
                 [4, { number: 4, eligible: true, stage: '[analyse] sonar front', buildUrl: status.buildUrl,
                     sonarReports: [{ label: 'Sonar front', error: 'Report unavailable' }] }],
-                ...compactStages.map(([stage], index) => [index + 6, {
-                    number: index + 6, eligible: true, stage, buildUrl: status.buildUrl
+                ...compactStages.map(([stage, label], index) => [index + 6, {
+                    number: index + 6, eligible: true, stage, buildUrl: status.buildUrl,
+                    failureKind: label === 'prettier' ? 'prettier' : undefined
                 }])
             ]);
             let settings = { showJenkins: true, jenkinsRepositories: ['dedalus-cis4u/orme-prescription'] };
@@ -89,6 +95,13 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                             log: { name: 'Run tests', text: logText }
                         }};
                     }
+                    if (message.type === 'FIX_PRETTIER_WITH_COPILOT') {
+                        if (fixError) return { ok: false, error: 'Comment permission denied' };
+                        return { ok: true, data: {
+                            commentUrl: 'https://github.com/dedalus-cis4u/orme-prescription/pull/1#issuecomment-42',
+                            alreadyRequested: false
+                        } };
+                    }
                     throw new Error('Unexpected message: ' + message.type);
                 } },
                 storage: { onChanged: { addListener(listener) { listeners.push(listener); } } }
@@ -100,7 +113,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
             (async () => {
                 await wait();
                 const badges = [...document.querySelectorAll('.gh-jenkins-badge')];
-                check(badges.length === 10, 'Only failed PRs should receive badges');
+                check(badges.length === 11, 'Only failed PRs should receive badges');
                 check(badges[0].textContent === 'build' && badges[0].title === 'build', 'Build badges must use the compact label');
                 check(badges[0].href === status.buildUrl, 'Non-Sonar failures must still open Jenkins');
                 for (const [index, side] of ['front', 'back'].entries()) {
@@ -141,7 +154,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 replacement.querySelector('.gh-jenkins-badge').remove();
                 document.querySelector('ul').replaceWith(replacement);
                 await wait();
-                check(document.querySelectorAll('.gh-jenkins-badge').length === 10, 'Replaced list must be restored from page results');
+                check(document.querySelectorAll('.gh-jenkins-badge').length === 11, 'Replaced list must be restored from page results');
                 check(count('GET_JENKINS_STATUSES') === 1, 'Replacing the list must not refetch');
                 status.stage = 'Unit tests';
                 route.pathname = '/dedalus-cis4u/orme-prescription/pull/1';
@@ -168,6 +181,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 const panel = document.querySelector('.gh-jenkins-panel');
                 check(panel.querySelector('p').textContent === 'STEP FAILED: Unit tests', 'PR summary must explicitly identify the failed step');
                 check(!panel.querySelector('.gh-jenkins-sonar-link'), 'Non-Sonar failures must not show Sonar links');
+                check(!panel.querySelector('.gh-jenkins-fix-prettier'), 'Non-Prettier failures must not offer a Copilot formatting action');
                 const logo = panel.querySelector('h3 img');
                 await logo.decode();
                 check(logo.naturalWidth > 0 && logo.src.startsWith('data:image/'), 'Title logo must load without external requests');
@@ -181,7 +195,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                         const log = panel.querySelector('pre');
                         const bounds = panel.getBoundingClientRect();
                         const buildLink = panel.querySelector('.gh-jenkins-header .gh-jenkins-build-link');
-                        check(buildLink.textContent === 'Allez vers le build' && buildLink.href === status.buildUrl, 'Build action must be clearly labelled');
+                        check(buildLink.textContent === 'Aller vers le build' && buildLink.href === status.buildUrl, 'Build action must be clearly labelled');
                         const titleBounds = panel.querySelector('h3').getBoundingClientRect();
                         const linkBounds = buildLink.getBoundingClientRect();
                         if (width === 352) {
@@ -256,11 +270,41 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 check(!document.querySelector('.gh-jenkins-sonar-link'), 'Missing reports must not create guessed links');
                 check(!document.querySelector('.gh-jenkins-actions .gh-jenkins-error'), 'Missing reports must not take up space in the panel');
                 check(!document.querySelector('.gh-jenkins-panel').textContent.includes('Report unavailable'), 'Missing report messages must not be displayed');
+                status.failureKind = 'prettier';
+                status.stage = '[BUILD] build all';
+                status.sonarReports = [];
+                route.href += '&prettier=1';
+                window.dispatchEvent(new Event('popstate'));
+                await wait();
+                const fix = document.querySelector('.gh-jenkins-fix-prettier');
+                check(fix.textContent === 'Fix Prettier with Copilot', 'Confirmed Prettier failures must offer the fix action');
+                check(fix.previousElementSibling.getAttribute('aria-controls'), 'Fix action must sit beside the diagnostic toggle');
+                check(count('FIX_PRETTIER_WITH_COPILOT') === 0, 'Rendering must never post a Copilot request');
+                fix.click();
+                check(count('FIX_PRETTIER_WITH_COPILOT') === 0 && !fix.disabled, 'Cancelling confirmation must not send a request');
+                check(confirmations[0].includes('credits'), 'Confirmation must explain that Copilot can consume credits');
+                confirmFix = true;
+                fixError = true;
+                fix.click();
+                check(fix.disabled, 'Posting must disable the action');
+                await wait();
+                check(!fix.disabled && fix.textContent === 'Fix Prettier with Copilot', 'Posting errors must allow a retry');
+                check(document.querySelector('.gh-jenkins-actions [role="alert"]').textContent === 'Comment permission denied', 'Posting errors must remain visible');
+                fixError = false;
+                fix.click();
+                fix.click();
+                await wait();
+                check(count('FIX_PRETTIER_WITH_COPILOT') === 2, 'Double clicks must not send duplicate requests');
+                check(fix.disabled && fix.textContent === 'Demande envoyee', 'Success must report a posted request, not claim the agent completed a fix');
+                const commentLink = document.querySelector('.gh-jenkins-actions [role="status"] a');
+                check(commentLink.href.endsWith('#issuecomment-42'), 'Success must link to the posted comment');
+                const fixRequest = requests.filter(request => request.type === 'FIX_PRETTIER_WITH_COPILOT').at(-1);
+                check(fixRequest.payload.number === 1 && fixRequest.payload.buildUrl === status.buildUrl, 'Fix requests must identify the displayed build and PR');
                 settings = { ...settings, showJenkins: false };
                 listeners.forEach(listener => listener({ showJenkins: { newValue: false } }, 'local'));
                 await wait();
                 check(!document.querySelector('.gh-jenkins-panel'), 'Disabling feature must remove its panel');
-                check(count('GET_JENKINS_STATUSES') === 5, 'Settings change must not restart disabled requests');
+                check(count('GET_JENKINS_STATUSES') === 6, 'Settings change must not restart disabled requests');
                 document.body.dataset.result = 'passed';
             })().catch(error => {
                 document.body.dataset.result = 'failed';
@@ -273,7 +317,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
             '--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
             '--disable-background-networking', '--host-resolver-rules=MAP * ~NOTFOUND',
             `--user-data-dir=${path.join(temporary, 'profile')}`,
-            '--virtual-time-budget=12000', '--dump-dom', `file://${file}`
+            '--virtual-time-budget=18000', '--dump-dom', `file://${file}`
         ], { encoding: 'utf8', timeout: 30000, maxBuffer: 2 * 1024 * 1024 });
         assert.equal(result.status, 0, result.stderr);
         assert.match(result.stdout, /<body[^>]*data-result="passed"/, result.stdout.slice(-5000));
