@@ -1,5 +1,23 @@
 (() => {
     const OWN = '.gh-jenkins-panel, .gh-jenkins-badge';
+    const STAGE_LABELS = new Map([
+        ['declarative: checkout scm', 'checkout'],
+        ['declarative: tool install', 'outils'],
+        ['[initialize] collecting repository version', 'version'],
+        ['[prepare] merge', 'merge'],
+        ['[initialize] clean', 'nettoyage'],
+        ['[initialize] analyze new front version', 'version front'],
+        ['[prepare] increment front version', 'version front'],
+        ['[prepare] update dependencies', 'dependances'],
+        ['[build] build all', 'build'],
+        ['[test] unit tests', 'tests unitaires'],
+        ['[docker deploy] presc-admin deployment check', 'verif. deploiement'],
+        ['[docker deploy]: build presc-admin docker image', 'image docker'],
+        ['[docker deploy]: start container and check deployment', 'deploiement'],
+        ['[deploy] to nexus', 'nexus'],
+        ['[post] merge', 'merge'],
+        ['declarative: post actions', 'post-build']
+    ]);
     let settings = null;
     let pageKey = '';
     let generation = 0;
@@ -19,6 +37,12 @@
         return node;
     }
 
+    function stageLabel(name = '') {
+        const stage = name.trim();
+        const sonar = /^(?:\[[^\]]+\]\s*)?sonar\s+(back|front)$/i.exec(stage);
+        return sonar ? `sonar ${sonar[1].toLowerCase()}` : STAGE_LABELS.get(stage.toLowerCase()) || stage;
+    }
+
     async function send(type, payload) {
         const response = await chrome.runtime.sendMessage({ type, payload });
         if (!response?.ok) {
@@ -32,14 +56,20 @@
     }
 
     function renderDetail(panel, detail, number) {
-        const list = element('ul');
+        const list = element('ul', null, 'gh-jenkins-stages');
         for (const stage of detail.stages) {
             const seconds = Math.round((stage.durationMillis || 0) / 1000);
-            list.append(element('li', `${stage.name} : ${stage.status} (${seconds} s)`));
+            const row = element('li', null, 'gh-jenkins-stage');
+            row.dataset.status = stage.status;
+            const metadata = element('span', null, 'gh-jenkins-stage-meta');
+            metadata.append(element('span', stage.status, 'gh-jenkins-stage-status'));
+            metadata.append(element('span', `${seconds} s`));
+            row.append(element('span', stage.name, 'gh-jenkins-stage-name'), metadata);
+            list.append(row);
         }
         panel.append(list);
         if (detail.log) {
-            panel.append(element('strong', detail.log.name));
+            panel.append(element('strong', detail.log.name, 'gh-jenkins-log-title'));
             panel.append(element('pre', detail.log.text || 'Aucune sortie de log.'));
         } else {
             panel.append(element('p', 'Aucun log de step en echec disponible.'));
@@ -71,22 +101,64 @@
             return;
         }
         const panel = element('section', null, 'gh-jenkins-panel');
-        panel.append(element('h3', 'Jenkins'));
-        panel.append(element('p', status.error || status.stage, status.error ? 'gh-jenkins-error' : null));
+        const header = element('div', null, 'gh-jenkins-header');
+        const heading = element('h3');
+        const logoLink = element('a');
+        logoLink.href = 'https://www.jenkins.io/';
+        logoLink.target = '_blank';
+        logoLink.rel = 'noreferrer';
+        logoLink.setAttribute('aria-label', 'Jenkins');
+        const logo = element('img', null, 'gh-jenkins-logo');
+        logo.src = JENKINS_LOGO;
+        logo.alt = '';
+        logo.width = 24;
+        logo.height = 24;
+        logo.setAttribute('aria-hidden', 'true');
+        logoLink.append(logo);
+        heading.append(logoLink, document.createTextNode('Jenkins'));
+        header.append(heading);
         if (status.buildUrl) {
-            const link = element('a', 'Ouvrir le build');
+            const link = element('a', 'Allez vers le build', 'gh-jenkins-build-link');
             link.href = status.buildUrl;
             link.target = '_blank';
             link.rel = 'noreferrer';
-            panel.append(link);
+            header.append(link);
         }
-        const button = element('button', 'Charger le diagnostic');
+        panel.append(header);
+        panel.append(element('p', status.error || `STEP FAILED: ${status.stage}`, status.error ? 'gh-jenkins-error' : null));
+        const actions = element('div', null, 'gh-jenkins-actions');
+        for (const report of status.sonarReports || []) {
+            if (report.error) {
+                console.warn('Jenkins Sonar report:', report.label, report.error);
+            } else {
+                const link = element('a', `Aller vers ${report.label}`, 'gh-jenkins-sonar-link');
+                link.href = report.url;
+                link.target = '_blank';
+                link.rel = 'noreferrer';
+                actions.append(link);
+            }
+        }
+        const diagnostic = element('div', null, 'gh-jenkins-diagnostic');
+        diagnostic.id = `gh-jenkins-diagnostic-${status.number}`;
+        diagnostic.hidden = true;
+        const button = element('button', 'Afficher le diagnostic');
         button.type = 'button';
+        button.setAttribute('aria-controls', diagnostic.id);
+        button.setAttribute('aria-expanded', 'false');
+        let loaded = false;
         button.addEventListener('click', async () => {
+            diagnostic.hidden = !diagnostic.hidden;
+            button.setAttribute('aria-expanded', String(!diagnostic.hidden));
+            button.textContent = diagnostic.hidden ? 'Afficher le diagnostic' : 'Masquer le diagnostic';
+            if (diagnostic.hidden || loaded) {
+                return;
+            }
             button.disabled = true;
             button.textContent = 'Chargement...';
             const feedback = element('p');
-            panel.append(feedback);
+            feedback.setAttribute('role', 'status');
+            feedback.textContent = 'Chargement du diagnostic...';
+            diagnostic.replaceChildren(feedback);
             try {
                 const { data } = await send('GET_JENKINS_DETAIL', { ...context, number: status.number });
                 if (!panel.isConnected) {
@@ -97,16 +169,18 @@
                     return;
                 }
                 feedback.remove();
-                renderDetail(panel, data, status.number);
-                button.remove();
+                renderDetail(diagnostic, data, status.number);
+                loaded = true;
             } catch (error) {
                 feedback.className = 'gh-jenkins-error';
                 feedback.textContent = error.message;
+            } finally {
                 button.disabled = false;
-                button.textContent = 'Reessayer';
+                button.textContent = 'Masquer le diagnostic';
             }
         });
-        panel.append(button);
+        actions.append(button);
+        panel.append(actions, diagnostic);
         anchor.prepend(panel);
     }
 
@@ -123,7 +197,8 @@
                 const match = /\/pull\/(\d+)(?:\/|$)/.exec(link.getAttribute('href') || '');
                 if (match) {
                     rows.set(Number(match[1]), {
-                        anchor: link.closest('[data-listview-item-title-container]') || link.parentElement
+                        anchor: link.closest('[data-listview-item-title-container]') || link.parentElement,
+                        title: link
                     });
                 }
             });
@@ -139,17 +214,32 @@
             }
             if (row.panel) {
                 renderPanel(row.anchor, status, context);
-            } else if (!row.anchor.querySelector('.gh-jenkins-badge')) {
-                const badge = element(status.buildUrl ? 'a' : 'span',
-                    status.error ? 'Jenkins indisponible' : status.stage, 'gh-jenkins-badge');
-                if (status.buildUrl) {
-                    badge.href = status.buildUrl;
+                continue;
+            }
+            let badge = row.anchor.querySelector('.gh-jenkins-badge');
+            if (!badge) {
+                const label = stageLabel(status.stage);
+                const sonar = label === 'sonar front' || label === 'sonar back';
+                const url = sonar
+                    ? status.sonarReports?.find((report) => report.label.toLowerCase() === label)?.url
+                    : status.buildUrl;
+                badge = element(url ? 'a' : 'span',
+                    status.error ? 'Jenkins indisponible' : label, 'gh-jenkins-badge');
+                if (url) {
+                    badge.href = url;
                     badge.target = '_blank';
                     badge.rel = 'noreferrer';
                 }
-                badge.title = status.error || status.stage;
+                badge.title = status.error || label;
                 badge.addEventListener('click', (event) => event.stopPropagation());
-                row.anchor.append(badge);
+            }
+            const jira = row.anchor.querySelector('.gh-pr-jira');
+            if (jira) {
+                if (jira.nextElementSibling !== badge) {
+                    jira.after(badge);
+                }
+            } else if (row.title.previousElementSibling !== badge) {
+                row.title.before(badge);
             }
         }
     }
@@ -179,7 +269,7 @@
         const requestedPage = location.href;
         numbers.forEach((number) => handled.add(number));
         try {
-            const { data } = await send('GET_JENKINS_STATUSES', { ...context, numbers });
+            const { data } = await send('GET_JENKINS_STATUSES', { ...context, numbers, includeSonar: true });
             if (current !== generation || requestedPage !== location.href) {
                 return;
             }

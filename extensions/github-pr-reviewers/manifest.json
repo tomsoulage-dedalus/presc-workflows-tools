@@ -40,7 +40,7 @@
     },
     {
       "matches": ["https://github.com/*"],
-      "js": ["jenkins.js"],
+      "js": ["jenkins-logo.js", "jenkins.js"],
       "css": ["jenkins.css"],
       "run_at": "document_idle"
     }

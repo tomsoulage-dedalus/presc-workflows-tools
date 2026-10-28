@@ -22,6 +22,7 @@ Clic droit sur l'icone de l'extension > **Options** (ou lien *Options* dans la p
 | Option | Description |
 | --- | --- |
 | Token GitHub (PAT) | Requis pour appeler l'API. Stocke dans `chrome.storage.local`. |
+| Tester les autorisations / Depot a verifier | Diagnostic du token saisi et des droits sur `owner/repo`, selon les actions cochees. Ne modifie aucune PR et n'enregistre pas le token. Le depot de test ne limite pas l'extension a ce depot. |
 | Membres de l'equipe | Un par ligne : `login` ou `login=Nom affiche`. L'ordre des lignes = l'ordre des boutons. Sert aussi de vivier pour le tirage. |
 | En conges / indisponibles | Logins grises dans la liste et **exclus du tirage**. |
 | Afficher la liste des membres | Affiche les boutons par membre. Active par defaut. |
@@ -47,6 +48,17 @@ Le tirage se fait parmi `membres - indisponibles - auteur - personnes deja sur l
 - Token fine-grained : `Pull requests: Read and write` + `Issues: Read and write` sur les depots concernes.
 
 Le token n'est jamais envoye ailleurs que vers `https://api.github.com`.
+
+Le bouton **Tester les autorisations** verifie l'identite, l'acces au depot, la lecture des PR
+et des revues (si une PR existe), ainsi que la lecture des issues si l'assignation est activee.
+Il controle les scopes quand GitHub les expose et distingue les droits du compte sur le depot
+des permissions accordees au token. Les erreurs 401, 403, 404, SSO et de limite de requetes sont
+affichees explicitement : un token valide peut ne pas avoir acces a un depot prive.
+
+Pour un token fine-grained, GitHub n'expose pas la liste de ses permissions dans ces reponses.
+Un acces en lecture ne prouve pas le droit d'ecriture : le diagnostic reste donc **partiel** et
+indique les permissions Write a confirmer dans les reglages du token. Il n'effectue aucune
+demande de revue, assignation ou autre ecriture pour les tester.
 
 ## Utilisation
 
@@ -93,33 +105,54 @@ Un PAT fine-grained doit aussi permettre la lecture des **Commit statuses**.
 | --- | --- |
 | PR fermee / mergee, hors depot ou hors labels | Aucun |
 | Build vert, en cours ou absent | Aucun |
-| PR ouverte du perimetre, build en echec | Un appel pour les stages, si le build n'est pas en cache |
+| PR ouverte du perimetre, build en echec hors Sonar | Un appel pour les stages, si le build n'est pas en cache |
+| Stage Sonar back/front en echec | Description du stage et logs des steps du scanner pour retrouver son rapport, sauf si deja en cache |
 
 Seul le contexte `continuous-integration/jenkins/pr-merge` est pris en compte.
 Les statuts des PR visibles sont recuperes en une requete GitHub groupee (100 PR maximum par
 lot). Jenkins est limite a trois requetes simultanees pour le chargement automatique.
 
 - **Liste des PR** : seul un build rouge recoit un badge avec le stage casse et un lien Jenkins.
-- **Page d'une PR** : un panneau Jenkins apparait pour un build rouge. Le bouton
-  **Charger le diagnostic** affiche les stages et leurs durees, puis les 60 dernieres lignes
+  Le badge rouge plein est place juste apres le logo Jira, avant le titre de la PR
+  (ou directement avant le titre si le lien Jira est absent).
+  Les etapes connues utilisent des noms courts : **build**, **tests unitaires**, **image docker**,
+  **deploiement**, **nexus**, **merge**, etc. Les noms complets restent dans le diagnostic.
+  Pour un stage Sonar en echec, le badge **sonar front** ou **sonar back** ouvre directement
+  le rapport Sonar correspondant, sans prefixe `[analyse]`. Sans URL de rapport, ce badge
+  reste du texte non cliquable, jamais un lien vers Jenkins.
+- **Page d'une PR** : un panneau Jenkins apparait pour un build rouge. Le lien **Allez vers le build**
+  ouvre Jenkins. Le bouton **Afficher le diagnostic** affiche les stages et leurs durees, puis les 60 dernieres lignes
   du log du premier step en echec du stage responsable. La recuperation du log coute au plus
-  deux appels supplementaires. **Copier le diagnostic** prepare un prompt pour investigation.
-- Le service worker **reverifie l'etat GitHub au clic**, meme si le panneau est deja affiche :
-  fermer/merger la PR ou passer au vert empeche tout nouvel appel Jenkins.
+  deux appels supplementaires. **Masquer le diagnostic** replie le contenu ; le rouvrir ne relance
+  pas les appels reseau. **Copier le diagnostic** prepare un prompt pour investigation.
+- **Sonar back/front** : uniquement lorsqu'un de ces stages est `FAILED`, le panneau propose
+  **Aller vers Sonar back/front** avec l'URL exacte du rapport extraite des logs de ce stage.
+  La branche ou la PR du lien est conservee. Si les deux stages echouent, les deux liens sont proposes.
+  Un stage Sonar reussi, ignore ou en cours ne declenche aucune recherche de rapport.
+  Sans lien disponible, aucun message ni emplacement Sonar n'est affiche ; les details restent
+  dans la console du navigateur. Le lien du build reste disponible.
+- Le service worker **reverifie l'etat GitHub lors du chargement du diagnostic**, meme si le panneau
+  est deja affiche : fermer/merger la PR ou passer au vert avant ce chargement empeche les appels Jenkins.
 - Les stages et logs des builds termines sont conserves localement (100 entrees au total,
-  resume et log comptant chacun pour une entree). Les appels simultanes pour la meme ressource
+  resume, log et lien de rapport Sonar comptant chacun pour une entree). Les appels simultanes pour la meme ressource
   sont mutualises ; un build en cours ou un appel en erreur n'est pas mis en cache.
 - Les mutations du DOM ne relancent pas les requetes pour les PR deja traitees. Les resultats
   sont renouveles a la navigation ou au rechargement de la page, sans polling.
 - Les erreurs sont affichees explicitement. Le diagnostic peut etre retente au clic ; pour
   actualiser les badges de la liste apres une erreur, recharger la page.
 
-Cette V1 ne consulte **pas SonarQube**, ne recupere pas les rapports JUnit, ne surveille pas les
+Cette V1 ne consulte **pas l'API SonarQube** : seuls les liens publies par Jenkins sont utilises.
+Elle ne recupere pas les rapports JUnit, ne surveille pas les
 builds et ne poste aucun commentaire Copilot. Le serveur Jenkins est limite a
 `https://ci-jenkins.orbis.dedalus.com`.
 
 Apres mise a jour, recharger l'extension dans `chrome://extensions`, accepter l'acces au serveur
 Jenkins si Chrome le demande, puis recharger GitHub.
+
+Le logo Jenkins est embarque dans `jenkins-logo.js`, sans requete d'image externe.
+Logo original par [Frontside](https://frontside.com), pour le [projet Jenkins](https://www.jenkins.io/),
+sous licence [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+Source : [Jenkins Artwork](https://www.jenkins.io/artwork/).
 
 ### Verification locale
 

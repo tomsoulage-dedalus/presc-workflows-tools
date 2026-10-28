@@ -11,7 +11,7 @@
 
     // GitHub sert deux mises en page de PR : on essaie du plus precis au plus generique.
     const PR_TITLE_SELECTORS = [
-        'h1[data-component="PH_Title"] .markdown-title',
+        'h1 .markdown-title',
         'h1[data-component="PH_Title"]',
         'bdi.js-issue-title',
         '.js-issue-title',

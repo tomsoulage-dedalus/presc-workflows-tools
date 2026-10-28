@@ -24,7 +24,7 @@ function pipeline(status = 'FAILED') {
         stages: [
             { name: 'Unit tests', status: 'UNSTABLE', durationMillis: 1000 },
             {
-                name: 'Sonar front',
+                name: 'Build',
                 status: 'FAILED',
                 durationMillis: 2000,
                 _links: { self: { href: `${BUILD}/execution/node/10/wfapi/describe` } }
@@ -33,7 +33,10 @@ function pipeline(status = 'FAILED') {
     };
 }
 
-function harness({ prs = [pullRequest()], settings = {}, build = pipeline(), failJenkins = false, stage = null } = {}) {
+function harness({
+    prs = [pullRequest()], settings = {}, build = pipeline(), failJenkins = false, stage = null,
+    stagesByPath = {}, logsByPath = {}, errorPaths = []
+} = {}) {
     const storage = { token: 'test-token', showJenkins: true, ...settings };
     const reviewerState = { user: { login: 'author' }, requested_reviewers: [], assignees: [] };
     const calls = [];
@@ -92,13 +95,16 @@ function harness({ prs = [pullRequest()], settings = {}, build = pipeline(), fai
             maxActive = Math.max(active, maxActive);
             await new Promise((resolve) => setTimeout(resolve, 2));
             active--;
-            if (failJenkins) {
+            if (failJenkins || errorPaths.includes(new URL(url).pathname)) {
                 return { ok: false, status: 503 };
             }
             return {
                 ok: true,
                 async json() {
                     if (/\/execution\//.test(url)) {
+                        if (Object.hasOwn(stagesByPath, new URL(url).pathname)) {
+                            return structuredClone(stagesByPath[new URL(url).pathname]);
+                        }
                         return stage || {
                             stageFlowNodes: [{
                                 name: 'Shell script',
@@ -118,7 +124,8 @@ function harness({ prs = [pullRequest()], settings = {}, build = pipeline(), fai
         const response = await originalFetch(url, options);
         if (url.endsWith('/wfapi/log') && response.ok) {
             return { ok: true, async json() {
-                return { text: '<span style="display: none">duplicate</span>Error &lt;test&gt;<br>failed' };
+                return { text: logsByPath[new URL(url).pathname] ??
+                    '<span style="display: none">duplicate</span>Error &lt;test&gt;<br>failed' };
             } };
         }
         return response;
@@ -215,14 +222,111 @@ test('batch fetches only pipeline summaries for eligible failures, not logs or S
     const app = harness({
         prs: [pullRequest(), pullRequest(2, { status: 'FAILURE' }), pullRequest(3, { status: 'SUCCESS' })]
     });
-    const result = await app.send('GET_JENKINS_STATUSES', { numbers: [1, 2, 3] });
+    const result = await app.send('GET_JENKINS_STATUSES', { numbers: [1, 2, 3], includeSonar: true });
     assert.equal(result.ok, true);
-    assert.equal(result.data[0].stage, 'Sonar front', 'hard failure must beat earlier unstable tests');
-    assert.equal(result.data[1].stage, 'Sonar front');
+    assert.equal(result.data[0].stage, 'Build', 'hard failure must beat earlier unstable tests');
+    assert.equal(result.data[1].stage, 'Build');
     assert.equal(result.data[2].eligible, false);
     assert.equal(app.calls.filter((call) => call.url.includes('api.github.com')).length, 1);
     assert.deepEqual(app.jenkinsCalls().map((call) => call.url), [`${HOST}${BUILD}/wfapi/describe`]);
     assert.equal(app.calls[0].options.headers.Authorization, 'Bearer test-token');
+});
+
+test('links each failed Sonar stage to its own report, preserving the analysed PR or branch', async () => {
+    const build = pipeline();
+    const stagesByPath = {};
+    const logsByPath = {};
+    const expected = [];
+    for (const [index, side] of ['back', 'front'].entries()) {
+        const node = 20 + index * 10;
+        const describePath = `${BUILD}/execution/node/${node}/wfapi/describe`;
+        const scanLog = `${BUILD}/execution/node/${node + 1}/wfapi/log`;
+        const waitLog = `${BUILD}/execution/node/${node + 2}/wfapi/log`;
+        build.stages.push({
+            name: `[analyse] sonar ${side}`, status: 'FAILED',
+            _links: { self: { href: describePath } }
+        });
+        stagesByPath[describePath] = { stageFlowNodes: [
+            { name: 'Shell Script', status: 'SUCCESS', _links: { log: { href: scanLog } } },
+            { name: 'Wait for SonarQube analysis', status: 'FAILED', _links: { log: { href: waitLog } } }
+        ] };
+        const url = `https://sonarqube.orbis.dedalus.com/bdx-dev/dashboard?id=project-${side}&` +
+            (side === 'front' ? 'pullRequest=1' : 'branch=feature%2Fexample');
+        logsByPath[waitLog] = 'Quality gate failed';
+        logsByPath[scanLog] = `<a href="${url}">${url.replace('&', '&amp;')}</a>\n` + 'More output\n'.repeat(70);
+        expected.push({ label: `Sonar ${side}`, url });
+    }
+    const app = harness({ build, stagesByPath, logsByPath });
+    assert.deepEqual(structuredClone((await app.send()).data[0].sonarReports), []);
+    assert.equal(app.jenkinsCalls().length, 1, 'Sonar discovery must be explicitly requested');
+    const statuses = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+    assert.equal(statuses.ok, true);
+    assert.equal(statuses.data[0].stage, 'Build', 'Sonar failures must also be detected after an earlier failed stage');
+    assert.deepEqual(structuredClone(statuses.data[0].sonarReports), expected);
+    assert.equal(app.jenkinsCalls().length, 7, 'Only failing Sonar stages and their scanner steps should be queried');
+    assert.equal(app.calls.some((call) => call.url.startsWith('https://sonarqube.')), false);
+    await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+    assert.equal(app.jenkinsCalls().length, 7, 'Reports from completed builds should be cached');
+    const restarted = harness({ settings: app.storage });
+    assert.deepEqual(structuredClone((await restarted.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports), expected);
+    assert.equal(restarted.jenkinsCalls().length, 0);
+});
+
+for (const [name, status] of [
+    ['[analyse] sonar back', 'SUCCESS'],
+    ['[analyse] sonar front', 'NOT_EXECUTED'],
+    ['Sonar front', 'IN_PROGRESS'],
+    ['Sonar back', 'UNSTABLE'],
+    ['Sonar back', 'ABORTED'],
+    ['Sonar', 'FAILED']
+]) {
+    test(`does not look for reports for ${name} with status ${status}`, async () => {
+        const build = pipeline();
+        build.stages.push({ name, status });
+        const app = harness({ build });
+        assert.deepEqual(structuredClone((await app.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports), []);
+        assert.equal(app.jenkinsCalls().length, 1);
+    });
+}
+
+for (const text of [
+    'Scanner failed before publishing a report',
+    'https://sonarqube.orbis.dedalus.com/bdx-dev/dashboard?id=example',
+    'https://example.com/dashboard?id=example&pullRequest=1',
+    'https://sonarqube.orbis.dedalus.com.evil.example/dashboard?id=example&pullRequest=1',
+    'https://sonarqube.orbis.dedalus.com/bdx-dev/api/ce/task?id=example&pullRequest=1'
+]) {
+    test(`reports unavailable Sonar links rather than guessing a destination: ${text}`, async () => {
+        const build = pipeline();
+        build.stages[1].name = '[analyse] sonar front';
+        const app = harness({ build, logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]: text } });
+        const result = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+        assert.equal(result.ok, true);
+        assert.equal(result.data[0].buildUrl, `${HOST}${BUILD}`);
+        assert.equal(result.data[0].sonarReports[0].url, undefined);
+        assert.match(result.data[0].sonarReports[0].error, /Aucun lien de rapport/);
+        assert.equal(Object.keys(app.storage.jenkinsBuildCache).some((key) => key.startsWith('sonar:')), false);
+    });
+}
+
+test('surfaces Sonar discovery errors, retries them, and rejects off-host log URLs', async () => {
+    const build = pipeline();
+    build.stages[1].name = '[analyse] sonar back';
+    const errorPaths = [`${BUILD}/execution/node/10/wfapi/describe`];
+    const app = harness({
+        build, errorPaths,
+        logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]:
+            'https://sonarqube.orbis.dedalus.com/bdx-dev/dashboard?id=example&pullRequest=1' }
+    });
+    assert.match((await app.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports[0].error, /503/);
+    errorPaths.length = 0;
+    assert.ok((await app.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports[0].url);
+
+    const offHost = harness({ build, stage: { stageFlowNodes: [
+        { name: 'Shell Script', _links: { log: { href: 'https://example.com/job/scan/log' } } }
+    ] } });
+    assert.match((await offHost.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports[0].error, /non autorisee/);
+    assert.equal(offHost.jenkinsCalls().length, 2);
 });
 
 test('click loads logs once, strips hidden timestamps, and reuses persistent cache', async () => {

@@ -150,6 +150,48 @@ const JenkinsTools = (() => {
         }, terminal);
     }
 
+    async function sonarReports(path, build) {
+        const reports = [];
+        for (const stage of build.stages) {
+            const match = /^(?:\[[^\]]+\]\s*)?sonar\s+(back|front)$/i.exec(stage.name);
+            if (stage.status !== 'FAILED' || !match) {
+                continue;
+            }
+            const label = `Sonar ${match[1].toLowerCase()}`;
+            try {
+                const url = await cached(`sonar:${path}:${stage.describePath}`, async () => {
+                    if (!stage.describePath) {
+                        throw new Error('Description du stage indisponible.');
+                    }
+                    const description = await request(jenkinsUrl(stage.describePath));
+                    const steps = (description.stageFlowNodes || []).filter((step) =>
+                        /shell script|batch script|powershell|sonarqube/i.test(step.name) && step._links?.log?.href);
+                    for (const step of steps.reverse()) {
+                        const output = await request(jenkinsUrl(step._links.log.href));
+                        const text = logText(output.text || '');
+                        for (const candidate of text.match(/https:\/\/[^\s<>"']+/g) || []) {
+                            if (!candidate.startsWith('https://sonarqube.orbis.dedalus.com/')) {
+                                continue;
+                            }
+                            const report = new URL(candidate);
+                            if (report.origin === 'https://sonarqube.orbis.dedalus.com' &&
+                                !report.username && !report.password && report.pathname.endsWith('/dashboard') &&
+                                report.searchParams.get('id') &&
+                                (report.searchParams.get('branch') || report.searchParams.get('pullRequest'))) {
+                                return report.href;
+                            }
+                        }
+                    }
+                    throw new Error('Aucun lien de rapport avec branche ou PR trouve dans les logs de ce stage.');
+                }, () => terminal(build));
+                reports.push({ label, url });
+            } catch (error) {
+                reports.push({ label, error: error.message });
+            }
+        }
+        return reports;
+    }
+
     async function statuses(payload) {
         const statuses = await githubStatuses(payload);
         let cursor = 0;
@@ -168,6 +210,7 @@ const JenkinsTools = (() => {
                     }
                     status.stage = build.failedStage?.name || 'Build en echec';
                     status.buildUrl = build.buildUrl;
+                    status.sonarReports = payload.includeSonar === true ? await sonarReports(path, build) : [];
                 } catch (error) {
                     status.error = error.message;
                 }
@@ -176,13 +219,16 @@ const JenkinsTools = (() => {
         return statuses;
     }
 
-    function stripHtml(text) {
+    function logText(text) {
         return text.replace(/<span style="display: none">[\s\S]*?<\/span>/gi, '')
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<[^>]+>/g, '')
             .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-            .replace(/&#0?39;/g, "'").replace(/&amp;/g, '&')
-            .split('\n').slice(-60).join('\n').trim();
+            .replace(/&#0?39;/g, "'").replace(/&amp;/g, '&');
+    }
+
+    function stripHtml(text) {
+        return logText(text).split('\n').slice(-60).join('\n').trim();
     }
 
     async function detail({ owner, repo, number }) {

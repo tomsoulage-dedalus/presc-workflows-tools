@@ -3,6 +3,7 @@
 // une fois les options sauvegardees, ce sont les valeurs stockees qui priment.
 const DEFAULT_SETTINGS = {
     token: '',
+    tokenTestRepository: 'dedalus-cis4u/orme-prescription',
     team: ['e-k-n-i-t', 'apzgw', 'tomsoulage-dedalus', 'mohammedsel', 'lucas-merienne'],
     unavailable: ['apzpr'],
     showTeam: true,

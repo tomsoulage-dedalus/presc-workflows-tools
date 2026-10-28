@@ -92,6 +92,11 @@
             background-color: #f6f8fa;
         }
 
+        button:disabled {
+            cursor: wait;
+            opacity: 0.6;
+        }
+
         .token-controls {
             display: flex;
             gap: 8px;
@@ -107,23 +112,37 @@
             margin-left: 0;
         }
 
-        button:disabled {
-            cursor: wait;
-            opacity: 0.6;
+        #tokenCheck {
+            margin-top: 10px;
+        }
+
+        #tokenCheck ul {
+            padding-left: 20px;
+        }
+
+        #tokenCheck li {
+            margin-bottom: 6px;
+        }
+
+        #tokenCheck .success {
+            color: #1a7f37;
+        }
+
+        #tokenCheck .warning {
+            color: #9a6700;
+        }
+
+        #tokenCheck .error {
+            color: #cf222e;
         }
 
         #status {
             margin-left: 12px;
             font-size: 13px;
-        }
-
-        #status,
-        #tokenStatus {
             color: #1a7f37;
         }
 
-        #status.error,
-        #tokenStatus.error {
+        #status.error {
             color: #cf222e;
         }
     </style>
@@ -136,15 +155,23 @@
             <label for="token">Token GitHub (PAT)</label>
             <div class="token-controls">
                 <input id="token" type="password" autocomplete="off" placeholder="ghp_..." />
-                <button id="testToken" class="secondary" type="button">Tester le token</button>
+                <button id="testToken" class="secondary" type="button">Tester les autorisations</button>
             </div>
-            <p id="tokenStatus" class="hint" role="status"></p>
             <p class="hint">
                 Token classique avec le scope <code>repo</code>, ou fine-grained avec les permissions
                 <code>Pull requests: Read and write</code> et <code>Issues: Read and write</code>.
                 Il est stocke uniquement dans le stockage local du navigateur.
-                Le test verifie l'authentification, pas les permissions sur les depots.
             </p>
+            <label for="tokenTestRepository">Depot a verifier</label>
+            <input id="tokenTestRepository" type="text" placeholder="owner/repo" />
+            <p class="hint">
+                Le test utilise le token saisi, meme non enregistre, et les actions cochees ci-dessous.
+                Il ne modifie aucune PR. Ce depot sert uniquement au diagnostic, pas a limiter l'extension.
+            </p>
+            <div id="tokenCheck" role="status" hidden>
+                <p id="tokenCheckSummary"></p>
+                <ul id="tokenCheckDetails"></ul>
+            </div>
         </div>
     </div>
 
@@ -219,8 +246,9 @@
         </div>
         <p class="hint">
             Serveur : ci-jenkins.orbis.dedalus.com. Aucun appel Jenkins pour les PR fermees/mergees,
-            les builds verts ou en cours. Seul le stage casse est charge automatiquement ;
-            les logs sont charges au clic. Aucun appel SonarQube dans cette version.
+            les builds verts ou en cours. Les logs du diagnostic sont charges au clic.
+            Les logs d'un stage Sonar back/front en echec servent aussi a retrouver
+            le lien de son rapport. Aucun appel a l'API SonarQube.
         </p>
     </div>
 
