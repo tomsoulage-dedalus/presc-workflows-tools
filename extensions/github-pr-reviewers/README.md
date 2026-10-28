@@ -92,10 +92,10 @@ Les animations sont desactivees si le systeme est en `prefers-reduced-motion`.
 ### Diagnostic Jenkins (V1)
 
 Dans les options, la section **Jenkins** permet d'activer le diagnostic et de choisir les
-depots et labels concernes. Le diagnostic est **desactive par defaut** : cocher son activation
-puis enregistrer pour l'utiliser. Le perimetre propose est `dedalus-cis4u/orme-prescription`,
-label `WORKFLOWS`. Une activation deja enregistree est conservee ; decocher l'option pour la retirer.
-Sans activation, aucun appel de diagnostic GitHub/Jenkins n'est effectue et aucun element Jenkins
+depots et labels concernes. Le diagnostic est **active par defaut**. Le perimetre propose est
+`dedalus-cis4u/orme-prescription`, label `WORKFLOWS`. Un choix deja enregistre est conserve,
+y compris une desactivation ; decocher l'option puis enregistrer pour desactiver le diagnostic.
+Si desactive, aucun appel de diagnostic GitHub/Jenkins n'est effectue et aucun element Jenkins
 n'est affiche. Les reviewers, l'assignation, le tirage et les liens Jira restent independants.
 Tous les labels configures doivent etre presents ; une liste de depots vide desactive les appels.
 Le PAT existant est reutilise pour GitHub, jamais pour Jenkins, qui est interroge en anonyme.

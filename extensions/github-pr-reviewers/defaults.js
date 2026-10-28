@@ -13,7 +13,7 @@ const DEFAULT_SETTINGS = {
     hideSelf: true,
     replaceExisting: false,
     showJiraLinks: true,
-    showJenkins: false,
+    showJenkins: true,
     jenkinsRepositories: ['dedalus-cis4u/orme-prescription'],
     jenkinsLabels: ['WORKFLOWS']
 };

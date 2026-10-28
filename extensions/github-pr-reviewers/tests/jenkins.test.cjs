@@ -185,14 +185,19 @@ test('disabled feature and excluded repository make no network calls', async () 
     }
 });
 
-test('existing installations without a Jenkins setting remain opted out', async () => {
+test('enables Jenkins without a saved preference while preserving an explicit opt-out', async () => {
     const app = harness();
     delete app.storage.showJenkins;
     const result = await app.send('GET_SETTINGS');
-    assert.equal(result.settings.showJenkins, false);
+    assert.equal(result.settings.showJenkins, true);
+    assert.equal((await app.send()).data[0].eligible, true);
+    assert.equal(app.jenkinsCalls().length, 1);
+    const calls = app.calls.length;
+    app.storage.showJenkins = false;
+    assert.equal((await app.send('GET_SETTINGS')).settings.showJenkins, false);
     assert.equal((await app.send()).data.length, 0);
     assert.equal((await app.send('GET_JENKINS_DETAIL')).data, null);
-    assert.equal(app.calls.length, 0);
+    assert.equal(app.calls.length, calls);
 });
 
 for (const showJenkins of [false, true]) {
@@ -490,7 +495,7 @@ test('options migrate existing settings and save the Jenkins scope without losin
     vm.runInContext(readFileSync(path.join(ROOT, 'defaults.js'), 'utf8'), context);
     vm.runInContext(readFileSync(path.join(ROOT, 'options.js'), 'utf8'), context);
     await vm.runInContext('restore()', context);
-    assert.equal(fields.get('showJenkins').checked, false);
+    assert.equal(fields.get('showJenkins').checked, true);
     assert.equal(fields.get('jenkinsRepositories').value, 'dedalus-cis4u/orme-prescription');
     assert.equal(fields.get('team').value, 'alice=Alice');
     fields.get('jenkinsRepositories').value = 'dedalus-cis4u/orme-prescription, example/other';
@@ -514,6 +519,8 @@ test('options migrate existing settings and save the Jenkins scope without losin
     await vm.runInContext('save()', context);
     assert.deepEqual(storage.team, ['bob=Bob']);
     assert.equal(storage.showJenkins, false);
+    await vm.runInContext('restore()', context);
+    assert.equal(fields.get('showJenkins').checked, false);
     assert.equal(storage.token, 'test-token');
     assert.equal(storage.showRandom, false);
 });
