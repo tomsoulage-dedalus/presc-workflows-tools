@@ -33,9 +33,15 @@ function pipeline(status = 'FAILED') {
     };
 }
 
+function prettierFailure(text = '[INFO]   130:1  error  Delete extra whitespace  prettier/prettier') {
+    const build = pipeline();
+    build.stages[1].name = '[BUILD] build all';
+    return { build, logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]: text } };
+}
+
 function harness({
     prs = [pullRequest()], settings = {}, build = pipeline(), failJenkins = false, stage = null,
-    stagesByPath = {}, logsByPath = {}, errorPaths = []
+    stagesByPath = {}, logsByPath = {}, errorPaths = [], comments = [], commentError = ''
 } = {}) {
     const storage = { token: 'test-token', showJenkins: true, ...settings };
     const reviewerState = { user: { login: 'author' }, requested_reviewers: [], assignees: [] };
@@ -62,7 +68,24 @@ function harness({
             calls.push({ url, options });
             if (url.startsWith('https://api.github.com/repos/')) {
                 let body;
-                if (url.endsWith('/requested_reviewers') && options.method === 'POST') {
+                if (/\/issues\/\d+\/comments(?:\?|$)/.test(url)) {
+                    if (options.method === 'POST') {
+                        if (commentError) {
+                            return { ok: false, status: 403, async text() {
+                                return JSON.stringify({ message: commentError });
+                            } };
+                        }
+                        body = {
+                            id: comments.length + 1,
+                            body: JSON.parse(options.body).body,
+                            html_url: `https://github.com/dedalus-cis4u/orme-prescription/pull/1#issuecomment-${comments.length + 1}`
+                        };
+                        comments.push(body);
+                    } else {
+                        const page = Number(new URL(url).searchParams.get('page'));
+                        body = structuredClone(comments.slice((page - 1) * 100, page * 100));
+                    }
+                } else if (url.endsWith('/requested_reviewers') && options.method === 'POST') {
                     reviewerState.requested_reviewers = JSON.parse(options.body).reviewers.map((login) => ({ login }));
                     body = reviewerState;
                 } else if (url.endsWith('/assignees') && options.method === 'POST') {
@@ -138,6 +161,7 @@ function harness({
         calls,
         prs,
         storage,
+        comments,
         get maxActive() { return maxActive; },
         jenkinsCalls() { return calls.filter((call) => call.url.startsWith(HOST)); },
         send(type = 'GET_JENKINS_STATUSES', payload = {}) {
@@ -191,6 +215,7 @@ test('enables Jenkins without a saved preference while preserving an explicit op
     const result = await app.send('GET_SETTINGS');
     assert.equal(result.settings.showJenkins, true);
     assert.equal((await app.send()).data[0].eligible, true);
+    assert.equal((await app.send('GET_JENKINS_STATUSES', { repo: 'orme-prescription-api' })).data[0].eligible, true);
     assert.equal(app.jenkinsCalls().length, 1);
     const calls = app.calls.length;
     app.storage.showJenkins = false;
@@ -301,18 +326,33 @@ for (const text of [
     'https://sonarqube.orbis.dedalus.com.evil.example/dashboard?id=example&pullRequest=1',
     'https://sonarqube.orbis.dedalus.com/bdx-dev/api/ce/task?id=example&pullRequest=1'
 ]) {
-    test(`reports unavailable Sonar links rather than guessing a destination: ${text}`, async () => {
+    test(`silently omits unavailable Sonar links rather than guessing a destination: ${text}`, async () => {
         const build = pipeline();
         build.stages[1].name = '[analyse] sonar front';
         const app = harness({ build, logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]: text } });
         const result = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
         assert.equal(result.ok, true);
         assert.equal(result.data[0].buildUrl, `${HOST}${BUILD}`);
-        assert.equal(result.data[0].sonarReports[0].url, undefined);
-        assert.match(result.data[0].sonarReports[0].error, /Aucun lien de rapport/);
-        assert.equal(Object.keys(app.storage.jenkinsBuildCache).some((key) => key.startsWith('sonar:')), false);
+        assert.deepEqual(structuredClone(result.data[0].sonarReports), []);
+        const calls = app.jenkinsCalls().length;
+        await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+        assert.equal(app.jenkinsCalls().length, calls, 'Completed builds without a report must not be rescanned');
     });
 }
+
+test('silently skips failed Sonar stages with no executed steps after an earlier build failure', async () => {
+    const build = pipeline();
+    build.stages.push({
+        name: '[analyse] sonar back', status: 'FAILED',
+        _links: { self: { href: `${BUILD}/execution/node/20/wfapi/describe` } }
+    });
+    const app = harness({ build, stage: { stageFlowNodes: [] } });
+    const result = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+    assert.equal(result.ok, true);
+    assert.equal(result.data[0].stage, 'Build');
+    assert.deepEqual(structuredClone(result.data[0].sonarReports), []);
+    assert.equal(app.jenkinsCalls().length, 2);
+});
 
 test('surfaces Sonar discovery errors, retries them, and rejects off-host log URLs', async () => {
     const build = pipeline();
@@ -332,6 +372,104 @@ test('surfaces Sonar discovery errors, retries them, and rejects off-host log UR
     ] } });
     assert.match((await offHost.send('GET_JENKINS_STATUSES', { includeSonar: true })).data[0].sonarReports[0].error, /non autorisee/);
     assert.equal(offHost.jenkinsCalls().length, 2);
+});
+
+test('detects explicit Prettier failures before truncating logs and reuses the diagnostic cache', async () => {
+    const app = harness({
+        ...prettierFailure(
+            '<span class="timestamp"><b>10:26:49</b> </span><span style="display: none">[timestamp]</span>' +
+            '[INFO]   130:1  error  Delete extra whitespace  prettier/prettier\n' + 'More output\n'.repeat(70)
+        ),
+        settings: { jenkinsBuildCache: { [`log:${BUILD}`]: { text: 'Old cached log without classification' } } }
+    });
+    const result = await app.send();
+    assert.equal(result.data[0].failureKind, 'prettier');
+    assert.equal(app.jenkinsCalls().length, 3);
+    assert.equal(app.calls.some((call) => call.url.includes('/comments')), false, 'Detection must never post or query comments');
+    const detail = await app.send('GET_JENKINS_DETAIL');
+    assert.equal(detail.data.log.prettier, true);
+    assert.doesNotMatch(detail.data.log.text, /prettier\/prettier/, 'Classification must not depend on the displayed 60-line tail');
+    await app.send();
+    assert.equal(app.jenkinsCalls().length, 3);
+    const restarted = harness({ settings: app.storage });
+    assert.equal((await restarted.send()).data[0].failureKind, 'prettier');
+    assert.equal(restarted.jenkinsCalls().length, 0);
+});
+
+for (const text of [
+    '[INFO] Prettier 3.0.0\n[ERROR] Compilation failed',
+    '[INFO] 130:1 warning Prefer a different format prettier/prettier',
+    'Example: 130:1 error Delete whitespace prettier/prettier'
+]) {
+    test(`does not classify unrelated failures or mere Prettier mentions: ${text}`, async () => {
+        const app = harness(prettierFailure(text));
+        assert.equal((await app.send()).data[0].failureKind, undefined);
+        assert.equal(app.jenkinsCalls().length, 3);
+    });
+}
+
+test('keeps the build badge when optional log classification fails and retries on refresh', async () => {
+    const errorPaths = [`${BUILD}/execution/node/11/wfapi/log`];
+    const app = harness({ ...prettierFailure(), errorPaths });
+    const result = await app.send();
+    assert.equal(result.ok, true);
+    assert.equal(result.data[0].stage, '[BUILD] build all');
+    assert.equal(result.data[0].error, undefined);
+    assert.equal(result.data[0].failureKind, undefined);
+    errorPaths.length = 0;
+    assert.equal((await app.send()).data[0].failureKind, 'prettier');
+});
+
+test('posts one scoped Copilot request per confirmed build, including concurrent clicks and later retries', async () => {
+    const app = harness(prettierFailure());
+    const payload = { buildUrl: `${HOST}${BUILD}` };
+    const results = await Promise.all([
+        app.send('FIX_PRETTIER_WITH_COPILOT', payload),
+        app.send('FIX_PRETTIER_WITH_COPILOT', payload)
+    ]);
+    assert.ok(results.every((result) => result.ok), JSON.stringify(results));
+    assert.equal(app.comments.length, 1);
+    const comment = app.comments[0];
+    assert.match(comment.body, /^@copilot Fix only the Prettier formatting errors/);
+    assert.ok(comment.body.includes(`${HOST}${BUILD}`));
+    assert.match(comment.body, /formatting-only fix to this PR branch/);
+    assert.match(comment.body, /Do not change application behavior/);
+    assert.equal(results[0].data.commentUrl, comment.html_url);
+    assert.equal(app.jenkinsCalls().length, 3);
+
+    app.comments.unshift(...Array.from({ length: 100 }, (_, index) => ({ body: `Existing comment ${index}` })));
+    const restarted = harness({ settings: app.storage, comments: app.comments });
+    const duplicate = await restarted.send('FIX_PRETTIER_WITH_COPILOT', payload);
+    assert.equal(duplicate.ok, true);
+    assert.equal(duplicate.data.alreadyRequested, true);
+    assert.equal(duplicate.data.commentUrl, comment.html_url);
+    assert.equal(restarted.calls.filter((call) => call.options.method === 'POST' && call.url.includes('/comments')).length, 0);
+    assert.ok(restarted.calls.some((call) => call.url.endsWith('comments?per_page=100&page=2')));
+});
+
+test('refuses Copilot requests for stale builds, closed PRs, green builds and unconfirmed Prettier failures', async () => {
+    for (const options of [
+        { prs: [pullRequest(1, { state: 'CLOSED' })] },
+        { prs: [pullRequest(1, { status: 'SUCCESS' })] },
+        { settings: { showJenkins: false } },
+        { logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]: 'Compilation failed' } },
+        { buildUrl: `${HOST}/job/orme/job/PR-1/41` }
+    ]) {
+        const app = harness({ ...prettierFailure(), ...options });
+        const result = await app.send('FIX_PRETTIER_WITH_COPILOT', { buildUrl: options.buildUrl || `${HOST}${BUILD}` });
+        assert.equal(result.ok, false);
+        assert.match(result.error, /build a change|Prettier ne peut plus etre confirmee/);
+        assert.equal(app.comments.length, 0);
+        assert.equal(app.calls.some((call) => call.url.includes('/comments')), false);
+    }
+});
+
+test('surfaces GitHub comment permission errors without claiming a Copilot request was posted', async () => {
+    const app = harness({ ...prettierFailure(), commentError: 'Resource not accessible by personal access token' });
+    const result = await app.send('FIX_PRETTIER_WITH_COPILOT', { buildUrl: `${HOST}${BUILD}` });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /Resource not accessible/);
+    assert.equal(app.comments.length, 0);
 });
 
 test('click loads logs once, strips hidden timestamps, and reuses persistent cache', async () => {
@@ -496,7 +634,7 @@ test('options migrate existing settings and save the Jenkins scope without losin
     vm.runInContext(readFileSync(path.join(ROOT, 'options.js'), 'utf8'), context);
     await vm.runInContext('restore()', context);
     assert.equal(fields.get('showJenkins').checked, true);
-    assert.equal(fields.get('jenkinsRepositories').value, 'dedalus-cis4u/orme-prescription');
+    assert.equal(fields.get('jenkinsRepositories').value, 'dedalus-cis4u/orme-prescription, dedalus-cis4u/orme-prescription-api');
     assert.equal(fields.get('team').value, 'alice=Alice');
     fields.get('jenkinsRepositories').value = 'dedalus-cis4u/orme-prescription, example/other';
     fields.get('jenkinsLabels').value = 'WORKFLOWS, READY';

@@ -120,6 +120,16 @@
     margin: 0;
 }
 
+.gh-jenkins-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.gh-jenkins-controls button {
+    max-width: 100%;
+}
+
 .gh-jenkins-panel button {
     margin: 8px 8px 0 0;
     padding: 4px 8px;
@@ -128,6 +138,17 @@
     border: 1px solid var(--borderColor-default, #d1d9e0);
     border-radius: 6px;
     cursor: pointer;
+}
+
+.gh-jenkins-panel .gh-jenkins-fix-prettier {
+    color: #fff;
+    background: #0969da;
+    border-color: #0969da;
+}
+
+.gh-jenkins-panel .gh-jenkins-fix-prettier:hover:not(:disabled) {
+    background: #0550ae;
+    border-color: #0550ae;
 }
 
 .gh-jenkins-panel button:disabled {

@@ -182,9 +182,11 @@ const JenkinsTools = (() => {
                             }
                         }
                     }
-                    throw new Error('Aucun lien de rapport avec branche ou PR trouve dans les logs de ce stage.');
+                    return null;
                 }, () => terminal(build));
-                reports.push({ label, url });
+                if (url) {
+                    reports.push({ label, url });
+                }
             } catch (error) {
                 reports.push({ label, error: error.message });
             }
@@ -210,6 +212,16 @@ const JenkinsTools = (() => {
                     }
                     status.stage = build.failedStage?.name || 'Build en echec';
                     status.buildUrl = build.buildUrl;
+                    if (/^\[build\]\s+build all$/i.test(status.stage)) {
+                        try {
+                            const log = await failedLog(path, build);
+                            if (log?.prettier) {
+                                status.failureKind = 'prettier';
+                            }
+                        } catch (error) {
+                            console.warn('Jenkins failure detection:', error.message);
+                        }
+                    }
                     status.sonarReports = payload.includeSonar === true ? await sonarReports(path, build) : [];
                 } catch (error) {
                     status.error = error.message;
@@ -227,8 +239,26 @@ const JenkinsTools = (() => {
             .replace(/&#0?39;/g, "'").replace(/&amp;/g, '&');
     }
 
-    function stripHtml(text) {
-        return logText(text).split('\n').slice(-60).join('\n').trim();
+    async function failedLog(path, build) {
+        if (!build.failedStage?.describePath) {
+            return null;
+        }
+        return cached(`log-v2:${path}`, async () => {
+            const stage = await request(jenkinsUrl(build.failedStage.describePath));
+            const step = (stage.stageFlowNodes || []).find((node) =>
+                ['FAILED', 'ABORTED', 'UNSTABLE'].includes(node.status));
+            const href = step?._links?.log?.href;
+            if (!href) {
+                return null;
+            }
+            const output = await request(jenkinsUrl(href));
+            const text = logText(output.text || '');
+            return {
+                name: step.name,
+                text: text.split('\n').slice(-60).join('\n').trim(),
+                prettier: /^\s*(?:\d{1,2}:\d{2}:\d{2}\s+)?(?:\[INFO\]\s+)?\d+:\d+\s+error\b[^\n]*\bprettier\/prettier\b/im.test(text)
+            };
+        }, () => terminal(build));
     }
 
     async function detail({ owner, repo, number }) {
@@ -242,22 +272,69 @@ const JenkinsTools = (() => {
         if (!terminal(build) || build.status === 'SUCCESS') {
             return null;
         }
-        if (!build.failedStage?.describePath) {
-            return { ...build, log: null };
-        }
-        const log = await cached(`log:${path}`, async () => {
-            const stage = await request(jenkinsUrl(build.failedStage.describePath));
-            const step = (stage.stageFlowNodes || []).find((node) =>
-                ['FAILED', 'ABORTED', 'UNSTABLE'].includes(node.status));
-            const href = step?._links?.log?.href;
-            if (!href) {
-                return null;
-            }
-            const output = await request(jenkinsUrl(href));
-            return { name: step.name, text: stripHtml(output.text || '') };
-        }, () => terminal(build));
+        const log = await failedLog(path, build);
         return { ...build, log };
     }
 
-    return { statuses, detail };
+    async function postPrettierFix({ owner, repo, number, buildUrl }) {
+        const build = await detail({ owner, repo, number });
+        if (!build || build.buildUrl !== buildUrl || !build.log?.prettier) {
+            throw new Error('Le build a change ou une erreur Prettier ne peut plus etre confirmee. Recharge la page.');
+        }
+        const settings = await getSettings();
+        requireToken(settings);
+        const marker = `<!-- github-pr-reviewers:fix-prettier:${encodeURIComponent(build.buildUrl)} -->`;
+        for (let page = 1; ; page++) {
+            const comments = await githubRequest(
+                settings.token,
+                `/repos/${owner}/${repo}/issues/${number}/comments?per_page=100&page=${page}`
+            );
+            if (!Array.isArray(comments)) {
+                throw new Error('Reponse GitHub inattendue pour les commentaires.');
+            }
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+            if (existing) {
+                return { commentUrl: existing.html_url, alreadyRequested: true };
+            }
+            if (comments.length < 100) {
+                break;
+            }
+        }
+        const body = [
+            '@copilot Fix only the Prettier formatting errors reported by this Jenkins build.',
+            '',
+            `Build: ${build.buildUrl}`,
+            '',
+            'The failed build step contains explicit ESLint prettier/prettier errors.',
+            'Use the repository formatting tools, run the relevant checks, and push the formatting-only fix to this PR branch.',
+            'Limit changes to PR files or files explicitly reported as failing; do not reformat the whole repository.',
+            'Do not change application behavior, fix unrelated failures, or open a separate pull request.',
+            '',
+            marker
+        ].join('\n');
+        const comment = await githubRequest(settings.token, `/repos/${owner}/${repo}/issues/${number}/comments`, {
+            method: 'POST',
+            body: JSON.stringify({ body })
+        });
+        if (!comment?.html_url) {
+            throw new Error('Commentaire envoye, mais GitHub n\'a pas retourne son lien. Verifie la PR avant de reessayer.');
+        }
+        return { commentUrl: comment.html_url, alreadyRequested: false };
+    }
+
+    async function fixPrettier(payload) {
+        const key = `fix-prettier:${payload.owner}/${payload.repo}/${payload.number}`;
+        if (inFlight.has(key)) {
+            return inFlight.get(key);
+        }
+        const promise = postPrettierFix(payload);
+        inFlight.set(key, promise);
+        try {
+            return await promise;
+        } finally {
+            inFlight.delete(key);
+        }
+    }
+
+    return { statuses, detail, fixPrettier };
 })();

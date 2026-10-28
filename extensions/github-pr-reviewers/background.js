@@ -278,8 +278,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return false;
     }
 
-    if (message.type === 'GET_JENKINS_STATUSES' || message.type === 'GET_JENKINS_DETAIL') {
-        const action = message.type === 'GET_JENKINS_STATUSES' ? JenkinsTools.statuses : JenkinsTools.detail;
+    const jenkinsActions = {
+        GET_JENKINS_STATUSES: JenkinsTools.statuses,
+        GET_JENKINS_DETAIL: JenkinsTools.detail,
+        FIX_PRETTIER_WITH_COPILOT: JenkinsTools.fixPrettier
+    };
+    if (Object.hasOwn(jenkinsActions, message.type)) {
+        const action = jenkinsActions[message.type];
         action(message.payload)
             .then((data) => sendResponse({ ok: true, data }))
             .catch((error) => sendResponse({ ok: false, error: error.message }));

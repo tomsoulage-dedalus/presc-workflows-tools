@@ -93,7 +93,8 @@ Les animations sont desactivees si le systeme est en `prefers-reduced-motion`.
 
 Dans les options, la section **Jenkins** permet d'activer le diagnostic et de choisir les
 depots et labels concernes. Le diagnostic est **active par defaut**. Le perimetre propose est
-`dedalus-cis4u/orme-prescription`, label `WORKFLOWS`. Un choix deja enregistre est conserve,
+`dedalus-cis4u/orme-prescription` et `dedalus-cis4u/orme-prescription-api`, label `WORKFLOWS`.
+Un choix deja enregistre est conserve,
 y compris une desactivation ; decocher l'option puis enregistrer pour desactiver le diagnostic.
 Si desactive, aucun appel de diagnostic GitHub/Jenkins n'est effectue et aucun element Jenkins
 n'est affiche. Les reviewers, l'assignation, le tirage et les liens Jira restent independants.
@@ -106,6 +107,7 @@ Un PAT fine-grained doit aussi permettre la lecture des **Commit statuses**.
 | PR fermee / mergee, hors depot ou hors labels | Aucun |
 | Build vert, en cours ou absent | Aucun |
 | PR ouverte du perimetre, build en echec hors Sonar | Un appel pour les stages, si le build n'est pas en cache |
+| Echec de `[BUILD] build all` | Description du step en echec et log pour reconnaitre Prettier, sauf si deja en cache |
 | Stage Sonar back/front en echec | Description du stage et logs des steps du scanner pour retrouver son rapport, sauf si deja en cache |
 
 Seul le contexte `continuous-integration/jenkins/pr-merge` est pris en compte.
@@ -117,20 +119,30 @@ lot). Jenkins est limite a trois requetes simultanees pour le chargement automat
   (ou directement avant le titre si le lien Jira est absent).
   Les etapes connues utilisent des noms courts : **build**, **tests unitaires**, **image docker**,
   **deploiement**, **nexus**, **merge**, etc. Les noms complets restent dans le diagnostic.
+  Une erreur explicite `error ... prettier/prettier` dans le step build affiche **prettier**.
+  La simple presence du nom Prettier ou un avertissement ne suffit pas a classifier l'echec.
   Pour un stage Sonar en echec, le badge **sonar front** ou **sonar back** ouvre directement
   le rapport Sonar correspondant, sans prefixe `[analyse]`. Sans URL de rapport, ce badge
   reste du texte non cliquable, jamais un lien vers Jenkins.
-- **Page d'une PR** : un panneau Jenkins apparait pour un build rouge. Le lien **Allez vers le build**
+- **Page d'une PR** : un panneau Jenkins apparait pour un build rouge. Le lien **Aller vers le build**
   ouvre Jenkins. Le bouton **Afficher le diagnostic** affiche les stages et leurs durees, puis les 60 dernieres lignes
   du log du premier step en echec du stage responsable. La recuperation du log coute au plus
   deux appels supplementaires. **Masquer le diagnostic** replie le contenu ; le rouvrir ne relance
   pas les appels reseau. **Copier le diagnostic** prepare un prompt pour investigation.
+- **Correction Prettier avec Copilot** : le bouton **Fix Prettier with Copilot**, a cote du bouton
+  du diagnostic, apparait uniquement pour une erreur Prettier confirmee. Apres confirmation,
+  il reverifie le build courant et publie un commentaire `@copilot` demandant une correction
+  limitee au formatage sur la branche de la PR. La demande peut consommer des credits Copilot.
+  Un meme build ne recoit pas deux commentaires, meme apres un rechargement de page.
+  Le PAT doit permettre les commentaires sur la PR et l'agent cloud doit etre active pour le depot.
+  Le lien du commentaire confirme uniquement son envoi, pas le demarrage ou la reussite de l'agent.
+  Aucun commentaire n'est publie automatiquement pendant la detection ou l'affichage.
 - **Sonar back/front** : uniquement lorsqu'un de ces stages est `FAILED`, le panneau propose
   **Aller vers Sonar back/front** avec l'URL exacte du rapport extraite des logs de ce stage.
   La branche ou la PR du lien est conservee. Si les deux stages echouent, les deux liens sont proposes.
   Un stage Sonar reussi, ignore ou en cours ne declenche aucune recherche de rapport.
-  Sans lien disponible, aucun message ni emplacement Sonar n'est affiche ; les details restent
-  dans la console du navigateur. Le lien du build reste disponible.
+  Sans lien disponible, aucun message, avertissement console ni emplacement Sonar n'est affiche.
+  Les vraies erreurs reseau/API restent journalisees. Le lien du build reste disponible.
 - Le service worker **reverifie l'etat GitHub lors du chargement du diagnostic**, meme si le panneau
   est deja affiche : fermer/merger la PR ou passer au vert avant ce chargement empeche les appels Jenkins.
 - Les stages et logs des builds termines sont conserves localement (100 entrees au total,

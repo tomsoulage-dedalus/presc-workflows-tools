@@ -118,14 +118,15 @@
         heading.append(logoLink, document.createTextNode('Jenkins'));
         header.append(heading);
         if (status.buildUrl) {
-            const link = element('a', 'Allez vers le build', 'gh-jenkins-build-link');
+            const link = element('a', 'Aller vers le build', 'gh-jenkins-build-link');
             link.href = status.buildUrl;
             link.target = '_blank';
             link.rel = 'noreferrer';
             header.append(link);
         }
         panel.append(header);
-        panel.append(element('p', status.error || `STEP FAILED: ${status.stage}`, status.error ? 'gh-jenkins-error' : null));
+        const failure = status.failureKind === 'prettier' ? 'build - prettier failed' : status.stage;
+        panel.append(element('p', status.error || `STEP FAILED: ${failure}`, status.error ? 'gh-jenkins-error' : null));
         const actions = element('div', null, 'gh-jenkins-actions');
         for (const report of status.sonarReports || []) {
             if (report.error) {
@@ -179,7 +180,53 @@
                 button.textContent = 'Masquer le diagnostic';
             }
         });
-        actions.append(button);
+        const controls = element('div', null, 'gh-jenkins-controls');
+        controls.append(button);
+        actions.append(controls);
+        if (status.failureKind === 'prettier') {
+            const fix = element('button', 'Fix Prettier with Copilot', 'gh-jenkins-fix-prettier');
+            fix.type = 'button';
+            const feedback = element('p');
+            feedback.hidden = true;
+            fix.addEventListener('click', async () => {
+                if (!window.confirm(
+                    'Publier un commentaire @copilot pour corriger uniquement le formatage Prettier de cette PR ? ' +
+                    'Copilot peut pousser des commits et consommer des credits.'
+                )) {
+                    return;
+                }
+                fix.disabled = true;
+                fix.textContent = 'Envoi...';
+                feedback.hidden = true;
+                feedback.replaceChildren();
+                try {
+                    const { data } = await send('FIX_PRETTIER_WITH_COPILOT', {
+                        ...context, number: status.number, buildUrl: status.buildUrl
+                    });
+                    if (!panel.isConnected) {
+                        return;
+                    }
+                    fix.textContent = data.alreadyRequested ? 'Demande deja envoyee' : 'Demande envoyee';
+                    const comment = element('a', 'Voir la demande Copilot');
+                    comment.href = data.commentUrl;
+                    comment.target = '_blank';
+                    comment.rel = 'noreferrer';
+                    feedback.className = '';
+                    feedback.setAttribute('role', 'status');
+                    feedback.append(comment);
+                } catch (error) {
+                    feedback.className = 'gh-jenkins-error';
+                    feedback.setAttribute('role', 'alert');
+                    feedback.textContent = error.message;
+                    fix.disabled = false;
+                    fix.textContent = 'Fix Prettier with Copilot';
+                } finally {
+                    feedback.hidden = false;
+                }
+            });
+            controls.append(fix);
+            actions.append(feedback);
+        }
         panel.append(actions, diagnostic);
         anchor.prepend(panel);
     }
@@ -218,7 +265,7 @@
             }
             let badge = row.anchor.querySelector('.gh-jenkins-badge');
             if (!badge) {
-                const label = stageLabel(status.stage);
+                const label = status.failureKind === 'prettier' ? 'prettier' : stageLabel(status.stage);
                 const sonar = label === 'sonar front' || label === 'sonar back';
                 const url = sonar
                     ? status.sonarReports?.find((report) => report.label.toLowerCase() === label)?.url
