@@ -12,5 +12,8 @@ const DEFAULT_SETTINGS = {
     addAssignee: true,
     hideSelf: true,
     replaceExisting: false,
-    showJiraLinks: true
+    showJiraLinks: true,
+    showJenkins: true,
+    jenkinsRepositories: ['dedalus-cis4u/orme-prescription'],
+    jenkinsLabels: ['WORKFLOWS']
 };

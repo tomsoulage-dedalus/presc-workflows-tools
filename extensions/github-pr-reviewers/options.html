@@ -225,6 +225,34 @@
     </div>
 
     <div class="section">
+        <h2>Jenkins</h2>
+        <div class="checkbox">
+            <input id="showJenkins" type="checkbox" />
+            <label for="showJenkins">Activer le diagnostic Jenkins des builds en echec (optionnel)</label>
+        </div>
+        <p class="hint">
+            Active par defaut. Si desactive, aucun appel de diagnostic GitHub/Jenkins
+            ni affichage Jenkins. Les reviewers, l'assignation, le tirage au hasard et les liens Jira restent independants.
+        </p>
+        <div class="field">
+            <label for="jenkinsRepositories">Depots concernes</label>
+            <input id="jenkinsRepositories" type="text" placeholder="dedalus-cis4u/orme-prescription" />
+            <p class="hint">Format owner/repo, separes par des virgules. Vide : aucun depot.</p>
+        </div>
+        <div class="field">
+            <label for="jenkinsLabels">Labels requis</label>
+            <input id="jenkinsLabels" type="text" placeholder="WORKFLOWS" />
+            <p class="hint">Tous les labels doivent etre presents. Vide : toutes les PR ouvertes des depots configures.</p>
+        </div>
+        <p class="hint">
+            Serveur : ci-jenkins.orbis.dedalus.com. Aucun appel Jenkins pour les PR fermees/mergees,
+            les builds verts ou en cours. Les logs du diagnostic sont charges au clic.
+            Les logs d'un stage Sonar back/front en echec servent aussi a retrouver
+            le lien de son rapport. Aucun appel a l'API SonarQube.
+        </p>
+    </div>
+
+    <div class="section">
         <h2>Actions</h2>
 
         <div class="checkbox">

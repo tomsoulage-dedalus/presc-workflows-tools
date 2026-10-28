@@ -1,0 +1,157 @@
+.gh-jenkins-badge {
+    display: inline-block;
+    margin: 0 6px 0 0;
+    padding: 2px 7px;
+    border: 1px solid var(--bgColor-danger-emphasis, #cf222e);
+    border-radius: 6px;
+    color: var(--fgColor-onEmphasis, #ffffff);
+    background: var(--bgColor-danger-emphasis, #cf222e);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    vertical-align: middle;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.gh-jenkins-badge:hover {
+    color: var(--fgColor-onEmphasis, #ffffff);
+    text-decoration: none;
+}
+
+.gh-jenkins-panel {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid var(--borderColor-danger-muted, #cf222e);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.gh-jenkins-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.gh-jenkins-panel h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 14px;
+}
+
+.gh-jenkins-build-link {
+    white-space: nowrap;
+}
+
+.gh-jenkins-logo {
+    display: block;
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+}
+
+.gh-jenkins-panel .gh-jenkins-stages {
+    max-height: 280px;
+    margin: 12px 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+}
+
+.gh-jenkins-stage {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--borderColor-muted, #d1d9e0);
+}
+
+.gh-jenkins-stage-name {
+    min-width: 0;
+}
+
+.gh-jenkins-stage-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+    color: var(--fgColor-muted, #59636e);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.gh-jenkins-stage-status {
+    font-weight: 600;
+}
+
+.gh-jenkins-stage[data-status="FAILED"] .gh-jenkins-stage-status {
+    color: var(--fgColor-danger, #cf222e);
+}
+
+.gh-jenkins-stage[data-status="SUCCESS"] .gh-jenkins-stage-status {
+    color: var(--fgColor-success, #1a7f37);
+}
+
+.gh-jenkins-log-title {
+    display: block;
+    margin-top: 12px;
+}
+
+.gh-jenkins-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.gh-jenkins-panel .gh-jenkins-actions button {
+    margin: 0;
+}
+
+.gh-jenkins-panel button {
+    margin: 8px 8px 0 0;
+    padding: 4px 8px;
+    color: var(--fgColor-default, #1f2328);
+    background: var(--bgColor-muted, #f6f8fa);
+    border: 1px solid var(--borderColor-default, #d1d9e0);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.gh-jenkins-panel button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.gh-jenkins-panel pre {
+    box-sizing: border-box;
+    max-width: 100%;
+    max-height: 300px;
+    margin: 6px 0 12px;
+    padding: 10px;
+    overflow: auto;
+    color: var(--fgColor-default, #1f2328);
+    background: var(--bgColor-muted, #f6f8fa);
+    border: 1px solid var(--borderColor-default, #d1d9e0);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre;
+    overflow-wrap: normal;
+}
+
+.gh-jenkins-error {
+    color: var(--fgColor-danger, #cf222e);
+}

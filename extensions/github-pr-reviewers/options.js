@@ -13,6 +13,9 @@ const addAssigneeInput = document.getElementById('addAssignee');
 const hideSelfInput = document.getElementById('hideSelf');
 const replaceExistingInput = document.getElementById('replaceExisting');
 const showJiraLinksInput = document.getElementById('showJiraLinks');
+const showJenkinsInput = document.getElementById('showJenkins');
+const jenkinsRepositoriesInput = document.getElementById('jenkinsRepositories');
+const jenkinsLabelsInput = document.getElementById('jenkinsLabels');
 const statusLabel = document.getElementById('status');
 
 function clearTokenCheck() {
@@ -238,6 +241,9 @@ function fill(settings) {
     hideSelfInput.checked = settings.hideSelf !== false;
     replaceExistingInput.checked = settings.replaceExisting === true;
     showJiraLinksInput.checked = settings.showJiraLinks !== false;
+    showJenkinsInput.checked = settings.showJenkins === true;
+    jenkinsRepositoriesInput.value = settings.jenkinsRepositories.join(', ');
+    jenkinsLabelsInput.value = settings.jenkinsLabels.join(', ');
 }
 
 async function restore() {
@@ -253,6 +259,13 @@ function reset() {
 async function save() {
     const team = parseEntries(teamInput.value);
     const unavailable = parseEntries(unavailableInput.value);
+    const jenkinsRepositories = jenkinsRepositoriesInput.value.split(',').map((entry) => entry.trim()).filter(Boolean);
+    const jenkinsLabels = jenkinsLabelsInput.value.split(',').map((entry) => entry.trim()).filter(Boolean);
+
+    if (showJenkinsInput.checked && jenkinsRepositories.some((entry) => !/^[\w.-]+\/[\w.-]+$/.test(entry))) {
+        setStatus('Depot Jenkins invalide : utiliser owner/repo.', true);
+        return;
+    }
 
     if (!addReviewerInput.checked && !addAssigneeInput.checked) {
         setStatus('Active au moins "revue" ou "assigner", sinon le clic ne fait rien.', true);
@@ -275,7 +288,10 @@ async function save() {
         addAssignee: addAssigneeInput.checked,
         hideSelf: hideSelfInput.checked,
         replaceExisting: replaceExistingInput.checked,
-        showJiraLinks: showJiraLinksInput.checked
+        showJiraLinks: showJiraLinksInput.checked,
+        showJenkins: showJenkinsInput.checked,
+        jenkinsRepositories,
+        jenkinsLabels
     });
 
     const teamLogins = new Set(team.map(entryLogin));

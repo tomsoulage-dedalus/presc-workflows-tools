@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "GitHub PR Reviewers",
-  "version": "2.0.0",
-  "description": "Ajoute un reviewer/assignee sur une PR GitHub en un clic depuis la liste de l'equipe, ou par tirage au hasard. Lien Jira sur les titres de PR.",
+  "version": "2.1.0",
+  "description": "Reviewers, assignation, liens Jira et diagnostic a la demande des builds Jenkins en echec.",
   "permissions": ["storage", "activeTab", "tabs"],
-  "host_permissions": ["https://api.github.com/*"],
+  "host_permissions": ["https://api.github.com/*", "https://ci-jenkins.orbis.dedalus.com/*"],
   "options_page": "options.html",
   "action": {
     "default_title": "GitHub PR Reviewers",
@@ -36,6 +36,12 @@
       "matches": ["https://github.com/*"],
       "js": ["jira-logo.js", "jira.js"],
       "css": ["jira.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["jenkins-logo.js", "jenkins.js"],
+      "css": ["jenkins.css"],
       "run_at": "document_idle"
     }
   ]
