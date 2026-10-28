@@ -20,6 +20,7 @@ ci-dessous.
 | **switch-branch-all-repos** | `switch-branch-all-repos`                             | n'importe quelle branche | Modifie la branche courante de tous les repos locaux en une seule commande            | Modifie et met à jour la branche courante de tous les repos locaux                                                                                         |
 | **update-lib**             | `update-lib [--bug BUG_ID] [--lib LIB_NAME] [--test]` | dans un repo prescription-app/prescription-lib | Met à jour une/des dépendance.s npm et crée le.s commit.s dédié en une seule commande | Demande un `BUG_ID` (ou l'accepte via `--bug`), choisit une branche `*/develop` comme base, vérifie les changements en cours, crée la branche `bugfix`/`quality`, met à jour la lib choisie et commit. `--test` enchaîne aussi `npm install`, la vérification du proxy et `npm start` |
 | **deploy-docker** | `deploy-docker [--war PATH] [--container NAME]` | WAR déjà construit et conteneur OAS démarré | Déploie sans reconstruire le WAR | Copie le WAR dans le conteneur et le déploie via JBoss CLI |
+| **deploy-docker-bundle** | `deploy-docker-bundle [--war PATH] [--container NAME]` | WAR déjà construit et conteneur OAS du bundle démarré | Conserve le déploiement sur l'ancien conteneur | Même déploiement, avec `oas-orme-medication` par défaut |
 | **listenOAS** | `listenOAS [--level DEBUG\|INFO\|WARN\|ERROR] [--no-exclude]` | instance OAS locale | Suit les logs avec filtre de sévérité | Sélectionne une instance, suit `server/log/server.log` et exclut le bruit `UT005108` par défaut |
 
 ## Exemples d'utilisation
@@ -216,16 +217,25 @@ L'option `--test` enchaîne `npm install`, la vérification du proxy et
 Le WAR par défaut est
 `${PRESC_ADMIN_REPO}/deployment/presc-admin-war/target/orme-presc-admin.war`,
 avec `PRESC_ADMIN_REPO` valant `${HOME}/repos/orme-presc-admin` si non exporté.
-Le conteneur par défaut est `oas-orme-medication`.
+Le conteneur par défaut est `docker-orme-presc-admin-oas-1`.
 Docker doit être accessible et le conteneur démarré.
 
 ```bash
 bash scripts/deploy-docker.sh
-bash scripts/deploy-docker.sh --war /chemin/vers/orbis-medication.war --container oas-orme-medication
+bash scripts/deploy-docker.sh --war /chemin/vers/orbis-medication.war --container docker-orme-presc-admin-oas-1
 ```
 
 Le script copie le WAR dans `/tmp` du conteneur, appelle JBoss CLI avec
 `deploy --force`, puis nettoie la copie temporaire.
+
+### `deploy-docker-bundle`
+
+Version conservée pour l'ancien bundle : même fonctionnement et mêmes options
+que `deploy-docker`, avec `oas-orme-medication` comme conteneur par défaut.
+
+```bash
+bash scripts/deploy-docker-bundle.sh
+```
 
 ### `listenOAS`
 
