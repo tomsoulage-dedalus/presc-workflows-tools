@@ -11,7 +11,7 @@ PRESC_ADMIN_REPO="${PRESC_ADMIN_REPO:-${HOME}/repos/orme-presc-admin}"
 # =============================================================================
 
 WAR_PATH="${PRESC_ADMIN_REPO}/deployment/presc-admin-war/target/orme-presc-admin.war"
-CONTAINER="oas-orme-medication"
+CONTAINER="docker-orme-presc-admin-oas-1"
 JBOSS_CLI="/opt/orbis/oas/server/as/bin/jboss-cli.sh"
 
 usage() {
@@ -19,7 +19,7 @@ usage() {
 Usage:
   $(basename "$0") [options]
 
-Deploys a WAR into the OAS running in a docker container (orme-test-deploy).
+Deploys a WAR into the OAS running in a docker container (docker-orme-presc-admin-oas-1).
 
 Options:
   --war PATH         Override the configured WAR path
