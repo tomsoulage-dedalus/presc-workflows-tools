@@ -263,7 +263,7 @@ test('renders badges and click-only diagnostics without DOM observer request loo
                 });
                 check(document.querySelector('.gh-jenkins-build-link').href === status.buildUrl, 'Sonar actions must preserve the Jenkins build action');
                 check(count('GET_JENKINS_DETAIL') === 3, 'Sonar links must be available without expanding the diagnostic');
-                status.sonarReports = [{ label: 'Sonar front', error: 'Report unavailable' }];
+                status.sonarReports = [];
                 route.href += '&missing=1';
                 window.dispatchEvent(new Event('popstate'));
                 await wait();

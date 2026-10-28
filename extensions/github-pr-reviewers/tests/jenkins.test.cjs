@@ -326,18 +326,33 @@ for (const text of [
     'https://sonarqube.orbis.dedalus.com.evil.example/dashboard?id=example&pullRequest=1',
     'https://sonarqube.orbis.dedalus.com/bdx-dev/api/ce/task?id=example&pullRequest=1'
 ]) {
-    test(`reports unavailable Sonar links rather than guessing a destination: ${text}`, async () => {
+    test(`silently omits unavailable Sonar links rather than guessing a destination: ${text}`, async () => {
         const build = pipeline();
         build.stages[1].name = '[analyse] sonar front';
         const app = harness({ build, logsByPath: { [`${BUILD}/execution/node/11/wfapi/log`]: text } });
         const result = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
         assert.equal(result.ok, true);
         assert.equal(result.data[0].buildUrl, `${HOST}${BUILD}`);
-        assert.equal(result.data[0].sonarReports[0].url, undefined);
-        assert.match(result.data[0].sonarReports[0].error, /Aucun lien de rapport/);
-        assert.equal(Object.keys(app.storage.jenkinsBuildCache).some((key) => key.startsWith('sonar:')), false);
+        assert.deepEqual(structuredClone(result.data[0].sonarReports), []);
+        const calls = app.jenkinsCalls().length;
+        await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+        assert.equal(app.jenkinsCalls().length, calls, 'Completed builds without a report must not be rescanned');
     });
 }
+
+test('silently skips failed Sonar stages with no executed steps after an earlier build failure', async () => {
+    const build = pipeline();
+    build.stages.push({
+        name: '[analyse] sonar back', status: 'FAILED',
+        _links: { self: { href: `${BUILD}/execution/node/20/wfapi/describe` } }
+    });
+    const app = harness({ build, stage: { stageFlowNodes: [] } });
+    const result = await app.send('GET_JENKINS_STATUSES', { includeSonar: true });
+    assert.equal(result.ok, true);
+    assert.equal(result.data[0].stage, 'Build');
+    assert.deepEqual(structuredClone(result.data[0].sonarReports), []);
+    assert.equal(app.jenkinsCalls().length, 2);
+});
 
 test('surfaces Sonar discovery errors, retries them, and rejects off-host log URLs', async () => {
     const build = pipeline();

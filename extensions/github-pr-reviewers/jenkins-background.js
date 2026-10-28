@@ -182,9 +182,11 @@ const JenkinsTools = (() => {
                             }
                         }
                     }
-                    throw new Error('Aucun lien de rapport avec branche ou PR trouve dans les logs de ce stage.');
+                    return null;
                 }, () => terminal(build));
-                reports.push({ label, url });
+                if (url) {
+                    reports.push({ label, url });
+                }
             } catch (error) {
                 reports.push({ label, error: error.message });
             }

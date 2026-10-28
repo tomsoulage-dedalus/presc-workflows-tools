@@ -141,8 +141,8 @@ lot). Jenkins est limite a trois requetes simultanees pour le chargement automat
   **Aller vers Sonar back/front** avec l'URL exacte du rapport extraite des logs de ce stage.
   La branche ou la PR du lien est conservee. Si les deux stages echouent, les deux liens sont proposes.
   Un stage Sonar reussi, ignore ou en cours ne declenche aucune recherche de rapport.
-  Sans lien disponible, aucun message ni emplacement Sonar n'est affiche ; les details restent
-  dans la console du navigateur. Le lien du build reste disponible.
+  Sans lien disponible, aucun message, avertissement console ni emplacement Sonar n'est affiche.
+  Les vraies erreurs reseau/API restent journalisees. Le lien du build reste disponible.
 - Le service worker **reverifie l'etat GitHub lors du chargement du diagnostic**, meme si le panneau
   est deja affiche : fermer/merger la PR ou passer au vert avant ce chargement empeche les appels Jenkins.
 - Les stages et logs des builds termines sont conserves localement (100 entrees au total,
