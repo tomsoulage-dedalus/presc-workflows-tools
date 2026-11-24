@@ -3,7 +3,7 @@
 Extension Chrome qui ajoute un bloc **Root cause** au-dessus du champ *Étiquettes* des tickets Jira.
 Un clic sur une root cause ajoute l'étiquette `rc_<root cause>` au ticket (un second clic la retire). Maximum 2 par ticket.
 
-Root causes disponibles : `code`, `spec_notdefined`, `spec_ambiguity`, `regression`, `design`, `integration`, `dependency`, `not-a-bug`, `not_reproduced`.
+Root causes disponibles : `code`, `spec_notdefined`, `spec_ambiguity`, `regression`, `design`, `integration`, `dependency`, `not-a-bug`, `not_reproduced`, `split`.
 
 ## Installation
 
