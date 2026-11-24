@@ -1,182 +1,68 @@
 ---
 name: "pr-create"
-description: "Crée la Pull Request GitHub avec titre et body générés depuis le contexte du ticket Jira et les changements effectués."
+description: "Publie les changements approuvés et crée ou retrouve une PR draft avec la base réelle du dépôt, un résumé factuel et les vérifications exécutées."
 ---
 
-# PR Create Skill
+# PR Create
 
-## Required configuration
+Lire d'abord le [contrat commun](../WORKFLOW.md).
 
-Variables d'environnement requises :
-- `JIRA_DOMAIN`: Jira domain (e.g. `jira.dedalus.com`)
-- `JIRA_API_TOKEN`: Jira Server Personal Access Token (PAT)
+## 1. Vérifier la destination et le contenu
 
-Prérequis : `gh` CLI installé et authentifié.
+- Vérifier `git`, `gh`, l'authentification GitHub, le dépôt distant et la branche.
+  Ne pas installer d'outil automatiquement.
+- Déterminer la base depuis la PR existante, la demande explicite ou la branche
+  par défaut du dépôt, puis la confirmer si elle est ambiguë. Ne pas faire de
+  fallback silencieux entre `develop` et `main`.
+- Lire le périmètre Git complet, le plan et les résultats de vérification.
+  Ne pas publier des modifications préexistantes sans rapport.
+- Chercher une PR ouverte correspondant à la branche et au dépôt. Si elle
+  existe, restituer son URL ; ne la modifier ou ne publier de nouveaux commits
+  que si la demande l'autorise.
+- Résoudre le ticket s'il existe et lire ses informations utiles via le contrat
+  Jira. Dans un dépôt sans ticket, continuer sans Jira ; ne pas fabriquer de clé
+  ni exiger les conventions propres à ORME.
 
-> Si `gh` n'est pas installé : `brew install gh` (macOS) ou `winget install GitHub.cli` (Windows), puis `gh auth login`.
+## 2. Préparer la publication
 
-## Available commands
+Une demande explicite de créer la PR autorise le commit et le push des seuls
+changements concernés. Sinon, présenter le périmètre et demander validation
+avant publication.
 
-### `/pr-create`
+Si des changements approuvés restent à committer, inspecter le diff staged,
+ajouter uniquement leurs chemins explicites puis créer un commit descriptif.
+Ne pas inclure un fichier qui mélange des changements utilisateur non approuvés :
+demander comment le séparer. Inclure le trailer, sauf refus explicite :
 
-Génère et crée la Pull Request GitHub (draft) depuis la branche courante vers `develop`.
-
----
-
-## Type detection rule
-
-**The type is inferred from the ticket prefix (extracted from the branch name):**
-
-| Ticket prefix | Type   | Commit prefix |
-|---------------|--------|---------------|
-| `HORME-`      | Story  | `feat`        |
-| `ORBISBUG-`   | Defect | `fix`         |
-
----
-
-## PR title format
-
-> **⚠️ IMPORTANT: The title, body and all PR comments must be written in ENGLISH.**
-> **⚠️ MANDATORY: The PR title MUST end with `/fixed`. Never omit it.**
-
-```
-<COMMIT_PREFIX>(<ISSUE_KEY>): <SUMMARY> /fixed
+```text
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 ```
 
-| Ticket type | Example |
-|-------------|---------|
-| Story       | `feat(HORME-1444): add SSO SAML support /fixed` |
-| Defect      | `fix(ORBISBUG-302): fix crash on login /fixed` |
+Pousser explicitement la branche avec son upstream (`git push --set-upstream
+<remote> <branche>`), jamais avec force. Si le push échoue, s'arrêter et
+présenter l'erreur ; ne pas afficher une publication réussie.
 
----
+## 3. Rédiger et créer la PR draft
 
-## Detailed behaviour
+Titre et body en anglais. Respecter les conventions du dépôt cible.
+Pour ORME avec ticket Jira, conserver le titre
+`feat(HORME-XXXX): <summary> /fixed` ou
+`fix(ORBISBUG-XXXX): <summary> /fixed` et le label `WORKFLOWS`.
+Vérifier le label et le créer seulement si requis et autorisé ; signaler
+tout échec, sans `|| true` masquant les erreurs.
 
-### Step 0 — Vérifications préalables
+Le body décrit :
 
-```bash
-source ~/.bashrc
+1. Ticket et critères applicables, s'il y en a.
+2. Problème résolu et changements de comportement.
+3. Choix importants ou limites.
+4. Commandes de vérification réellement exécutées, résultats et contrôles
+   non exécutés avec leur raison.
 
-# Vérifier gh CLI
-gh --version
-```
+Ne pas annoncer de tests passants sur la base d'un ancien résumé non vérifié,
+cocher des AC sans preuve ou confondre lint et tests.
 
-Si `gh` n'est pas disponible :
-```
-❌ gh CLI non installé.
-   → macOS  : brew install gh
-   → Windows: winget install GitHub.cli
-   Puis : gh auth login
-```
-**Stopper.**
-
-Récupérer le contexte :
-```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-TICKET=$(echo $BRANCH | grep -oE '(HORME|ORBISBUG)-[0-9]+')
-```
-
-Déterminer le type :
-```bash
-if [[ "$TICKET" == HORME-* ]]; then
-  COMMIT_PREFIX="feat"
-elif [[ "$TICKET" == ORBISBUG-* ]]; then
-  COMMIT_PREFIX="fix"
-else
-  echo "❌ Unknown ticket prefix. Expected: HORME-XXXX or ORBISBUG-XXXX"
-  exit 1
-fi
-```
-
-### Step 1 — Lire le ticket Jira (pour le summary)
-
-```bash
-RESPONSE=$(curl -s -H "Authorization: Bearer ${JIRA_API_TOKEN}" \
-  -H "Accept: application/json" \
-  "https://${JIRA_DOMAIN}/rest/api/2/issue/${TICKET}?fields=summary,description,${JIRA_AC_FIELD:-customfield_10028}")
-
-SUMMARY=$(echo "$RESPONSE" | jq -r '.fields.summary')
-```
-
-### Step 2 — Générer le titre de la PR
-
-Format : `<COMMIT_PREFIX>(<ISSUE_KEY>): <SUMMARY> /fixed`
-
-Le résumé court est tiré du `SUMMARY` du ticket Jira.
-Si le résumé fait plus de 60 caractères, le tronquer proprement (ne pas couper un mot).
-
-Exemples :
-- `feat(HORME-1444): add SSO SAML support /fixed`
-- `fix(ORBISBUG-302): fix crash on login /fixed`
-
-### Step 3 — Générer le body de la PR
-
-```markdown
-## Jira Ticket
-
-[<ISSUE_KEY>](https://${JIRA_DOMAIN}/browse/<ISSUE_KEY>)
-
-## Acceptance Criteria
-
-- [ ] AC1
-- [ ] AC2
-- [ ] AC3
-
-## Description
-
-<résumé du ticket Jira en 3-5 phrases : ce qui était demandé et pourquoi>
-
-## Changes
-
-<liste des fichiers créés ou modifiés avec une description de ce qui a changé>
-- `src/app/...` — <description>
-- `src/app/...` — <description>
-
-## Tests
-
-<résultat du /test-implement : specs lancées et leur statut>
-- ✅ <spec-name.spec.ts> — <N> tests passants
-- ⚠️ <fichier.ts> — aucune spec (à créer)
-```
-
-### Step 4 — Créer la PR
-
-```bash
-# Ensure WORKFLOWS label exists
-gh label create "WORKFLOWS" --color "1D76DB" --description "PR managed by Jira workflow" 2>/dev/null || true
-
-gh pr create \
-  --title "${COMMIT_PREFIX}(${TICKET}): ${SUMMARY} /fixed" \
-  --body "<body généré>" \
-  --base develop \
-  --draft \
-  --label "WORKFLOWS"
-```
-
-### Step 5 — Afficher le résultat
-
-```
-✅ Workflow complete!
-
-🌿 Branch  : <branche-courante>
-📤 Push    : origin/<branche-courante>
-🔗 PR      : <PR URL>
-📋 PR title: <COMMIT_PREFIX>(<TICKET>): <SUMMARY> /fixed
-🏷️  Labels  : WORKFLOWS
-```
-
----
-
-## Error handling
-
-| Situation | Comportement |
-|-----------|-------------|
-| `gh` non installé | Afficher les instructions d'installation et stopper |
-| `gh` non authentifié | Afficher `gh auth login` et stopper |
-| Préfixe inconnu (ni `HORME-` ni `ORBISBUG-`) | "❌ Unknown prefix. Use HORME-XXXX or ORBISBUG-XXXX" |
-| Ticket non trouvé sur Jira | "❌ Ticket <KEY> not found on ${JIRA_DOMAIN}" |
-| `JIRA_API_TOKEN` manquant | "❌ Configure JIRA_API_TOKEN in ~/.bashrc" |
-| PR déjà existante pour cette branche | Afficher l'URL existante et stopper |
-| Branche non poussée | Proposer de lancer `/code-lint` d'abord |
-| `develop` n'existe pas | Fallback vers `main` |
-| Label `WORKFLOWS` n'existe pas | Le créer automatiquement |
+Créer avec `gh pr create --draft --base <base> --head <branche>` et le titre,
+le body et les labels applicables. Vérifier ensuite avec `gh pr view` le dépôt,
+la branche source, la base, le statut draft et l'URL.
+Rendre l'URL et les éventuels blocages, sans recopier tout le body.

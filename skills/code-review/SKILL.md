@@ -1,158 +1,55 @@
 ---
 name: "code-review"
-description: "Review IA du diff Angular basée sur les règles front et les leçons apprises. Met à jour .copilot/lessons.md si une nouvelle erreur bloquante est trouvée."
+description: "Relit en lecture seule le périmètre Git complet, front et back, pour identifier les bugs, régressions et écarts fonctionnels étayés."
 ---
 
-# Code Review Skill
+# Code Review
 
-## Required configuration
+Lire d'abord le [contrat commun](../WORKFLOW.md).
 
-Fichiers de référence :
-- `.github/instructions/frontend/front-rules.instructions.md` — règles de code front
-- `.copilot/lessons.md` — erreurs passées connues
+## 1. Charger le contexte
 
-## Available commands
+Déterminer la base et le périmètre Git complet : commits de la branche,
+changements staged, unstaged et nouveaux fichiers. Lire le plan validé, les
+instructions, les leçons existantes et les résultats de vérification disponibles.
 
-### `/code-review`
+Ne pas limiter la review à Angular ou à `src/` : inclure les modules Java, les
+tests, les ressources et les configurations pertinents. Lire le contexte des
+lignes modifiées et les appelants nécessaires pour évaluer leur effet.
 
-Analyse le diff `main...HEAD` sur les fichiers Angular et produit une review structurée.
+## 2. Chercher des problèmes démontrables
 
----
+Priorité aux bugs de logique, régressions, contrats incompatibles, erreurs de
+mapping, état partagé, concurrence, droits, comportements UI et tests qui
+manquent le scénario demandé. Comparer les AC et, si pertinent, le comportement
+GWT de référence.
 
-## Detailed behaviour
+Appliquer les règles du dépôt, mais distinguer un défaut fonctionnel d'une
+remarque de style. Ne pas réclamer automatiquement une abstraction, une méthode
+plus courte ou un commentaire de cast. Ne pas transformer une préférence de
+rédaction en bug bloquant.
 
-### Step 1 — Récupérer le diff
+Chaque constat doit préciser :
 
-```bash
-git diff main...HEAD -- 'src/**/*.ts' 'src/**/*.html' 'src/**/*.scss'
-```
+- fichier et lignes exactes ;
+- scénario déclencheur et impact ;
+- preuve issue du code ou d'une vérification ;
+- sévérité et correction minimale proposée.
 
-### Step 2 — Charger les fichiers de référence
+Ne pas inventer de problème pour remplir un quota. Une hypothèse non confirmée
+doit rester une question ou une limite, pas devenir un constat certain.
 
-- Lire `.github/instructions/frontend/front-rules.instructions.md`
-- Lire `.copilot/lessons.md`
+## 3. Restituer sans modifier
 
-Si `.github/instructions/frontend/front-rules.instructions.md` est absent, afficher `⚠️ front-rules.instructions.md introuvable — review sans règles custom.`
+Présenter d'abord les constats, classés par gravité, puis les limites de la
+review. En l'absence de constat, le dire sans prétendre avoir prouvé l'absence
+de tout bug. Ne pas annoncer de tests exécutés s'ils ont seulement été lus.
 
-### Step 3 — Analyser le diff
+La review est en lecture seule : ne pas corriger le code ni créer ou enrichir
+automatiquement `.copilot/lessons.md`. Proposer une leçon seulement pour un
+mécanisme durable et vérifié, sans duplication des règles ; son ajout requiert
+validation.
 
-Passer en revue chaque fichier modifié sur les axes suivants :
-
-#### 3a. Règles front (`front-rules.md`)
-
-Pour chaque règle du fichier, vérifier qu'elle n'est pas violée dans le diff.
-Signaler toute violation avec : fichier, numéro de ligne approximatif, règle concernée.
-
-#### 3b. DRY
-
-- Détecter du code logiquement dupliqué entre composants ou services
-- Si détecté → suggérer extraction en service partagé, pipe, ou fonction utilitaire
-
-#### 3c. Clean code
-
-- Méthode > 20 lignes → suggérer découpage avec proposition de noms de sous-méthodes
-- Nommage peu explicite : `data`, `res`, `tmp`, `obj`, `item`, `val` → proposer un nom plus descriptif
-- Logique métier dans un composant → proposer de la déplacer dans un service
-
-#### 3d. TypeScript
-
-- `any` explicite ou implicite → proposer le type correct ou l'interface à créer
-- `as` cast sans commentaire justificatif → signaler
-- Propriétés de classe déclarées sans valeur initiale ni `!` → signaler
-
-#### 3e. Angular
-
-- Subscription sans `takeUntilDestroyed()` ni `async` pipe → signaler
-- Appel HTTP direct dans un composant → signaler
-- `ChangeDetectionStrategy.OnPush` absent sur un composant présentationnel → signaler
-- `Subject` exposé publiquement sans `.asObservable()` → signaler
-
-#### 3f. Leçons connues (`lessons.md`)
-
-Vérifier que le diff ne reproduit pas une erreur déjà listée dans `lessons.md`.
-
-### Step 4 — Niveaux de sévérité
-
-Chaque problème est classé :
-
-| Niveau | Signification |
-|--------|--------------|
-| `[BLOQUANT]` | Viole une règle de `front-rules.instructions.md` ou reproduit une leçon connue — **doit être corrigé avant /test-implement** |
-| `[SUGGESTION]` | Amélioration recommandée mais non bloquante |
-| `[INFO]` | Observation sans action requise |
-
-### Step 5 — Mettre à jour `.copilot/lessons.md`
-
-Si une erreur `[BLOQUANT]` **nouvelle** est identifiée (non présente dans `lessons.md`) :
-
-1. Vérifier qu'une leçon similaire n'existe pas déjà — ne pas dupliquer
-2. Ajouter **une seule ligne** à la liste, au format :
-
-```markdown
-- `<TICKET>` — <règle en une phrase courte, max 120 caractères>
-```
-
-**Exemples de bonnes entrées :**
-```markdown
-- `PROJ-118` — Toujours utiliser `takeUntilDestroyed()` dans les composants avec subscriptions HTTP.
-- `PROJ-121` — Ne jamais retourner `any` depuis un service : créer une interface dans `models/`.
-- `PROJ-130` — `ChangeDetectionStrategy.OnPush` obligatoire sur tout composant présentationnel.
-```
-
-**Règles de rédaction :**
-- Une ligne = une règle actionnable
-- Commencer par un verbe ou une contrainte directe
-- Pas de contexte, pas d'explication — juste la règle
-
-### Step 6 — Afficher le rapport de review
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔍 Review — <TICKET>
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📊 Résumé :
-  Fichiers analysés : <N>
-  [BLOQUANT]        : <N>
-  [SUGGESTION]      : <N>
-  [INFO]            : <N>
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚨 Problèmes [BLOQUANT]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<fichier>:<ligne> — <description>
-  → Règle : <règle front-rules.instructions.md ou leçon>
-  → Correction : <suggestion concrète>
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💡 [SUGGESTION]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<fichier>:<ligne> — <description>
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ℹ️  [INFO]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-<observations>
-```
-
-### Step 7 — Décision finale
-
-- Si des `[BLOQUANT]` existent → afficher :
-  ```
-  ⛔ Des problèmes bloquants ont été trouvés.
-     Corrige-les puis relance /code-review.
-  ```
-- Si aucun `[BLOQUANT]` → afficher :
-  ```
-  ✅ Aucun bloquant. Tu peux continuer avec /test-implement.
-  ```
-
----
-
-## Error handling
-
-| Situation | Comportement |
-|-----------|-------------|
-| `git diff` vide | Afficher `⚠️ Aucun changement détecté par rapport à main.` |
-| `front-rules.instructions.md` absent | Avertir et continuer sans règles custom |
-| `lessons.md` absent | Créer le fichier vide avec `# Lessons` et continuer |
+Si des corrections sont nécessaires, attendre l'accord puis revenir à
+l'implémentation et aux tests concernés. Sinon, `/pr-create` reste une étape
+de publication explicitement déclenchée par l'utilisateur.
