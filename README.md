@@ -9,6 +9,18 @@ scripts utilitaires et extensions Chrome.
 | [Scripts](scripts/README.md) | Scripts utilitaires et documentation d'utilisation |
 | [Extensions](extensions/README.md) | Extensions Chrome : reviewers GitHub, liens Jira, root causes et debug EDP |
 
+## Workflow de développement
+
+Cinq skills couvrent le parcours principal :
+`task-analyze` → validation humaine → `task-implement` → `task-test` →
+`code-review` → publication explicite avec `pr-create`.
+
+`task-start`, `test-check`, `test-implement` et `code-lint` sont retirés :
+la préparation de branche rejoint l'implémentation, les tests sont regroupés,
+et le formatage/lint est intégré aux étapes qui modifient les fichiers.
+Les skills spécialisés sont conservés.
+Voir le [catalogue et la migration](skills/README.md#migration-des-anciennes-commandes).
+
 ## Extensions disponibles
 
 | Extension | Fonctionnalités |
