@@ -13,6 +13,7 @@
     'dependency',
     'not-a-bug',
     'not_reproduced',
+    'split',
   ];
   const MAX_SELECTED = 2;
   const TITLE = 'Root cause';
